@@ -61,8 +61,9 @@
 #define WORKLOAD_SCENARIO_U65    1
 #define WORKLOAD_SCENARIO_U80    2
 #define WORKLOAD_SCENARIO_U90    3
-#define WORKLOAD_SCENARIO_U100   4
-#define WORKLOAD_SCENARIO_U110   5
+#define WORKLOAD_SCENARIO_U95    4
+#define WORKLOAD_SCENARIO_U100   5
+#define WORKLOAD_SCENARIO_U110   6
 
 #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U90
 #define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
@@ -91,6 +92,12 @@
   #define TAU_CAMERA_WORKLOAD_US  40000ULL
   #define WORKLOAD_SCENARIO_NAME  "U90"
   #define WORKLOAD_UTILIZATION_PERCENT 90U
+#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U95
+  #define TAU_IMU_WORKLOAD_US     3167ULL
+  #define TAU_LIDAR_WORKLOAD_US   21111ULL
+  #define TAU_CAMERA_WORKLOAD_US  42222ULL
+  #define WORKLOAD_SCENARIO_NAME  "U95"
+  #define WORKLOAD_UTILIZATION_PERCENT 95U
 #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U100
   #define TAU_IMU_WORKLOAD_US     3333ULL
   #define TAU_LIDAR_WORKLOAD_US   22222ULL
@@ -136,6 +143,17 @@
 
 #if EDF_CHUNK_US == 0ULL
 #error "EDF_CHUNK_US must be greater than zero"
+#endif
+
+#if SCHED_ALGO == SCHED_ALGO_EDF
+  #define SCHED_ALGO_NAME "EDF"
+  #define SCHED_CSV_CHUNK_US 0ULL
+#elif SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
+  #define SCHED_ALGO_NAME "CHUNKED_EDF"
+  #define SCHED_CSV_CHUNK_US EDF_CHUNK_US
+#else
+  #define SCHED_ALGO_NAME "SUPERLOOP"
+  #define SCHED_CSV_CHUNK_US 0ULL
 #endif
 
 #define ENABLE_POLLING_PROFILE 1
@@ -1094,6 +1112,40 @@ static void Print_Task_Exec_Histogram(const char *title, Task_t *task)
   }
 }
 
+static void Print_CSV_TaskLine(const char *task_label,
+                               Task_t *task,
+                               uint64_t workload_us)
+{
+  char msg[384];
+  uint64_t exec_avg_us = 0;
+  uint64_t response_avg_us = 0;
+
+  if (task->run_count > 0)
+  {
+    exec_avg_us = task->total_exec_us / task->run_count;
+    response_avg_us = task->total_response_us / task->run_count;
+  }
+
+  snprintf(msg, sizeof(msg),
+           "CSV_TASK,SCHED=%s,SCENARIO=%s,U=%lu,TASK=%s,RUNS=%lu,C_US=%lu,T_MS=%lu,D_MS=%lu,EXEC_AVG_US=%lu,RESP_AVG_US=%lu,RESP_MAX_US=%lu,MISSES=%lu,SKIPPED=%lu,FAILURES=%lu,MAX_LATENESS_US=%lu\r\n",
+           SCHED_ALGO_NAME,
+           WORKLOAD_SCENARIO_NAME,
+           (unsigned long)WORKLOAD_UTILIZATION_PERCENT,
+           task_label,
+           (unsigned long)task->run_count,
+           (unsigned long)workload_us,
+           (unsigned long)task->period_ms,
+           (unsigned long)task->deadline_ms,
+           (unsigned long)exec_avg_us,
+           (unsigned long)response_avg_us,
+           (unsigned long)task->max_response_us,
+           (unsigned long)task->deadline_miss_count,
+           (unsigned long)task->skipped_release_count,
+           (unsigned long)task->total_timing_failures,
+           (unsigned long)task->max_lateness_us);
+  uart_print(msg);
+}
+
 static void Print_Exec_Samples(void)
 {
   char msg[64];
@@ -1139,7 +1191,7 @@ static void Print_Exec_Samples(void)
 
 static void Print_Profiling_Summary(void)
 {
-  char msg[256];
+  char msg[384];
 
   uint64_t tau1_avg_exec = 0;
   uint64_t tau2_avg_exec = 0;
@@ -1295,13 +1347,10 @@ static void Print_Profiling_Summary(void)
            (unsigned long)(PROFILE_WINDOW_US / 1000000ULL));
   uart_print(msg);
 
-  #if SCHED_ALGO == SCHED_ALGO_EDF
-    uart_print("scheduler algorithm: EDF\r\n");
-  #elif SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
-    uart_print("scheduler algorithm: CHUNKED_EDF\r\n");
-  #else
-    uart_print("scheduler algorithm: SUPERLOOP\r\n");
-  #endif
+  snprintf(msg, sizeof(msg),
+           "scheduler algorithm: %s\r\n",
+           SCHED_ALGO_NAME);
+  uart_print(msg);
 
   snprintf(msg, sizeof(msg),
            "workload scenario: %s\r\n",
@@ -1650,6 +1699,42 @@ static void Print_Profiling_Summary(void)
 #endif
 
   /* Print_Exec_Samples(); */
+
+  snprintf(msg, sizeof(msg),
+           "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
+           SCHED_ALGO_NAME,
+           WORKLOAD_SCENARIO_NAME,
+           (unsigned long)WORKLOAD_UTILIZATION_PERCENT,
+           (unsigned long)SCHED_CSV_CHUNK_US,
+           (unsigned long)g_sched_count,
+           (unsigned long)(sched_overhead_x10000 / 10000),
+           (unsigned long)(sched_overhead_x10000 % 10000),
+           (unsigned long)g_poll_count,
+           (unsigned long)(poll_overhead_x10000 / 10000),
+           (unsigned long)(poll_overhead_x10000 % 10000),
+           (unsigned long)(task_exec_percent_x10000 / 10000),
+           (unsigned long)(task_exec_percent_x10000 % 10000),
+           (unsigned long)(measured_busy_percent_x10000 / 10000),
+           (unsigned long)(measured_busy_percent_x10000 % 10000),
+           (unsigned long)(logical_idle_percent_x10000 / 10000),
+           (unsigned long)(logical_idle_percent_x10000 % 10000));
+  uart_print(msg);
+
+  #if ENABLE_SYNTH_IMU
+    Print_CSV_TaskLine("IMU", &tau_imu, TAU_IMU_WORKLOAD_US);
+  #endif
+
+  #if ENABLE_SYNTH_LIDAR
+    Print_CSV_TaskLine("LIDAR", &tau_lidar, TAU_LIDAR_WORKLOAD_US);
+  #endif
+
+  #if ENABLE_SYNTH_CAMERA
+    Print_CSV_TaskLine("CAMERA", &tau_camera, TAU_CAMERA_WORKLOAD_US);
+  #endif
+
+  #if ENABLE_SYNTH_CONTROL
+    Print_CSV_TaskLine("CONTROL", &tau_control, TAU_CONTROL_WORKLOAD_US);
+  #endif
 
   uart_print("=======================================\r\n\r\n");
 }
