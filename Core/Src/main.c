@@ -161,8 +161,50 @@
 #define EXPERIMENT_INTEGRATED      0
 #define EXPERIMENT_ISOLATED_TAU1   1
 #define EXPERIMENT_ISOLATED_TAU2   2
+#define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE 3
 
 #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+
+#define MINIMAL_PROFILE_WINDOW_US 100000000ULL  // Use 1000000000ULL for a 1000 s run.
+#define MINIMAL_TAU1_PERIOD_US 10000ULL
+#define MINIMAL_TAU2_PERIOD_US 50000ULL
+
+#if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
+  /* Dedicated two-task workloads; the existing three-task values stay unchanged. */
+  #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
+    #define MINIMAL_TAU1_WORKLOAD_US 2500ULL
+    #define MINIMAL_TAU2_WORKLOAD_US 12500ULL
+    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U50"
+    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 50U
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
+    #define MINIMAL_TAU1_WORKLOAD_US 3250ULL
+    #define MINIMAL_TAU2_WORKLOAD_US 16250ULL
+    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U65"
+    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 65U
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U80
+    #define MINIMAL_TAU1_WORKLOAD_US 4000ULL
+    #define MINIMAL_TAU2_WORKLOAD_US 20000ULL
+    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U80"
+    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 80U
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
+    #define MINIMAL_TAU1_WORKLOAD_US 4500ULL
+    #define MINIMAL_TAU2_WORKLOAD_US 22500ULL
+    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U90"
+    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 90U
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U95
+    #define MINIMAL_TAU1_WORKLOAD_US 4750ULL
+    #define MINIMAL_TAU2_WORKLOAD_US 23750ULL
+    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U95"
+    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 95U
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U100
+    #define MINIMAL_TAU1_WORKLOAD_US 5000ULL
+    #define MINIMAL_TAU2_WORKLOAD_US 25000ULL
+    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U100"
+    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 100U
+  #else
+    #error "Minimal Superloop profile supports U50, U65, U80, U90, U95, and U100 only"
+  #endif
+#endif
 
 #define TAU1_MAX_SAMPLES 700
 #define TAU2_MAX_SAMPLES 50
@@ -1836,6 +1878,127 @@ static void Run_Isolated_Tau2_Profile(void)
   }
 }
 
+#if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
+/* Measures task-body execution time versus all other busy-polling Superloop time. */
+static void Run_Minimal_Superloop_Profile(void)
+{
+  uint64_t profile_start_us;
+  uint64_t profile_finish_us;
+  uint64_t profile_elapsed_us;
+  uint64_t tau1_next_release_us;
+  uint64_t tau2_next_release_us;
+  uint64_t tau1_exec_us = 0;
+  uint64_t tau2_exec_us = 0;
+  uint64_t task_exec_us;
+  uint64_t other_us;
+  uint32_t tau1_runs = 0;
+  uint32_t tau2_runs = 0;
+  char msg[256];
+
+  profile_start_us = micros();
+  tau1_next_release_us = profile_start_us;
+  tau2_next_release_us = profile_start_us;
+
+  while ((micros() - profile_start_us) < MINIMAL_PROFILE_WINDOW_US)
+  {
+    uint64_t now_us = micros();
+
+    if (now_us >= tau1_next_release_us)
+    {
+      uint64_t exec_start_us = micros();
+      Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
+      uint64_t exec_finish_us = micros();
+
+      tau1_exec_us += exec_finish_us - exec_start_us;
+      tau1_runs++;
+      tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
+
+      while (exec_finish_us > tau1_next_release_us)
+      {
+        tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
+      }
+    }
+
+    if (now_us >= tau2_next_release_us)
+    {
+      uint64_t exec_start_us = micros();
+      Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
+      uint64_t exec_finish_us = micros();
+
+      tau2_exec_us += exec_finish_us - exec_start_us;
+      tau2_runs++;
+      tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
+
+      while (exec_finish_us > tau2_next_release_us)
+      {
+        tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
+      }
+    }
+  }
+
+  profile_finish_us = micros();
+  profile_elapsed_us = profile_finish_us - profile_start_us;
+  task_exec_us = tau1_exec_us + tau2_exec_us;
+
+  if (task_exec_us <= profile_elapsed_us)
+  {
+    other_us = profile_elapsed_us - task_exec_us;
+  }
+  else
+  {
+    other_us = 0;
+  }
+
+  uart_print("\r\n=== MINIMAL SUPERLOOP PROFILE ===\r\n");
+  snprintf(msg, sizeof(msg), "scenario: %s\r\n", MINIMAL_WORKLOAD_SCENARIO_NAME);
+  uart_print(msg);
+  snprintf(msg, sizeof(msg), "window_us: %llu\r\n", (unsigned long long)profile_elapsed_us);
+  uart_print(msg);
+  snprintf(msg, sizeof(msg),
+           "tau1: T=10000 us, C=%llu us, runs=%lu, exec_us=%llu\r\n",
+           (unsigned long long)MINIMAL_TAU1_WORKLOAD_US,
+           (unsigned long)tau1_runs, (unsigned long long)tau1_exec_us);
+  uart_print(msg);
+  snprintf(msg, sizeof(msg),
+           "tau2: T=50000 us, C=%llu us, runs=%lu, exec_us=%llu\r\n",
+           (unsigned long long)MINIMAL_TAU2_WORKLOAD_US,
+           (unsigned long)tau2_runs, (unsigned long long)tau2_exec_us);
+  uart_print(msg);
+  snprintf(msg, sizeof(msg), "task_exec_us: %llu\r\n", (unsigned long long)task_exec_us);
+  uart_print(msg);
+  snprintf(msg, sizeof(msg), "other_us: %llu\r\n", (unsigned long long)other_us);
+  uart_print(msg);
+  snprintf(msg, sizeof(msg), "task_percent: %llu.%04llu %%\r\n",
+           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
+           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) % 10000ULL));
+  uart_print(msg);
+  snprintf(msg, sizeof(msg), "other_percent: %llu.%04llu %%\r\n",
+           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
+           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) % 10000ULL));
+  uart_print(msg);
+  snprintf(msg, sizeof(msg),
+           "CSV_MINIMAL_SUPERLOOP,SCENARIO=%s,U=%u,WINDOW_US=%llu,TAU1_RUNS=%lu,TAU2_RUNS=%lu,TAU1_EXEC_US=%llu,TAU2_EXEC_US=%llu,TASK_EXEC_US=%llu,OTHER_US=%llu,TASK_PCT=%llu.%04llu,OTHER_PCT=%llu.%04llu\r\n",
+           MINIMAL_WORKLOAD_SCENARIO_NAME,
+           MINIMAL_WORKLOAD_UTILIZATION_PERCENT,
+           (unsigned long long)profile_elapsed_us,
+           (unsigned long)tau1_runs,
+           (unsigned long)tau2_runs,
+           (unsigned long long)tau1_exec_us,
+           (unsigned long long)tau2_exec_us,
+           (unsigned long long)task_exec_us,
+           (unsigned long long)other_us,
+           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
+           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) % 10000ULL),
+           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
+           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) % 10000ULL));
+  uart_print(msg);
+
+  while (1)
+  {
+  }
+}
+#endif
+
 static void Tasks_Init(void)
 {
   uint64_t now_us = scheduler_now_us();
@@ -1956,6 +2119,9 @@ int main(void)
 
   DWT_Init();
 
+  #if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
+  Run_Minimal_Superloop_Profile();
+  #else
   char msg[128];
 
   uart_print("\r\nSynthetic-only scheduler demo started\r\n");
@@ -1979,6 +2145,7 @@ int main(void)
 
   #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_TAU2
     Run_Isolated_Tau2_Profile();
+  #endif
   #endif
 
   /* USER CODE END 2 */
