@@ -19,6 +19,13 @@ Release/
 # JavaScript dependencies
 node_modules/
 
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Automated experiment output
+results/
+
 # OS/editor junk
 Thumbs.db
 Desktop.ini

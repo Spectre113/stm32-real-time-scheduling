@@ -1,0 +1,12 @@
+{
+  "scenarios": ["U50", "U65", "U80", "U90", "U95", "U100"],
+  "windows_us": [10000000, 30000000, 60000000, 100000000, 250000000, 500000000, 1000000000],
+  "modes": ["clean", "checks"],
+  "repeats": 1,
+  "scheduler_algorithm": "SCHED_ALGO_SUPERLOOP",
+  "integrated_window_us": 10000000,
+  "edf_chunk_us": 1000,
+  "build_configuration": "Debug",
+  "stlink_frequency_khz": 4000,
+  "uart_timeout_grace_s": 45
+}
