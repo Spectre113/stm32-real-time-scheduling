@@ -16,6 +16,9 @@ Release/
 *.a
 *.lib
 
+# JavaScript dependencies
+node_modules/
+
 # OS/editor junk
 Thumbs.db
 Desktop.ini
