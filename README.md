@@ -1,48 +1,50 @@
-# Демонстрация планировщиков реального времени на STM32F767
+# Real-Time Scheduler Demonstration on STM32F767
 
-Проект STM32CubeIDE для исследования алгоритмов планирования реального времени на микроконтроллере `STM32F767ZITx`: невытесняющего Superloop, невытесняющего EDF и Chunked EDF с кооперативным разбиением синтетической работы на части. Он запускает синтетические периодические задачи, измеряет их выполнение и выводит результаты в последовательный порт.
+[Русская версия](README.ru.md)
 
-По умолчанию включён чистый профиль Superloop для сценария `U65`: две синтетические задачи работают 60 секунд, после чего в UART выводятся отчёт и CSV-строка.
+STM32CubeIDE project for studying real-time scheduling algorithms on an `STM32F767ZITx`: a non-preemptive Superloop, non-preemptive EDF, and Chunked EDF that cooperatively splits synthetic work into chunks. The firmware runs synthetic periodic tasks, measures their execution, and writes results to the serial port.
 
-## Что потребуется
+By default, the clean Superloop profile runs scenario `U65` for 60 seconds. It then prints a report and a CSV row to UART.
 
-- Плата `NUCLEO-F767ZI` со встроенными ST-LINK и Virtual COM Port.
-- USB-кабель с передачей данных.
-- [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) с STM32Cube FW F7. Проект создан в STM32CubeMX 6.16.1.
-- Терминал для UART: [PuTTY](https://www.putty.org/), Tera Term или аналог.
+## Requirements
 
-На Windows драйвер ST-LINK обычно устанавливается вместе со STM32CubeIDE. Если виртуальный COM-порт не появился в «Диспетчере устройств», обновите драйвер ST-LINK и переподключите плату.
+- `NUCLEO-F767ZI` board with onboard ST-LINK and Virtual COM Port.
+- A data-capable USB cable.
+- [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) with STM32Cube FW F7. The project was created with STM32CubeMX 6.16.1.
+- A UART terminal such as [PuTTY](https://www.putty.org/) or Tera Term.
 
-## Быстрый запуск
+On Windows, STM32CubeIDE normally installs the ST-LINK driver. If no virtual COM port appears in Device Manager, update the ST-LINK driver and reconnect the board.
 
-1. Клонируйте репозиторий или распакуйте его архив.
-2. В STM32CubeIDE выберите `File → Import… → General → Existing Projects into Workspace`, укажите корень репозитория и завершите импорт.
-3. Подключите плату через разъём ST-LINK USB.
-4. Соберите проект: `Project → Build All`.
-5. Откройте UART-терминал до запуска программы.
-6. Нажмите `Run` или `Debug` в STM32CubeIDE. IDE прошьёт контроллер через ST-LINK и запустит программу.
+## Quick start
 
-### Настройка PuTTY
+1. Clone the repository or extract its archive.
+2. In STM32CubeIDE, choose `File → Import… → General → Existing Projects into Workspace`, select the repository root, and finish the import.
+3. Connect the board through the ST-LINK USB connector.
+4. Build the project with `Project → Build All`.
+5. Open the UART terminal before starting the firmware.
+6. Click `Run` or `Debug` in STM32CubeIDE. The IDE programs the MCU through ST-LINK and starts it.
 
-1. В «Диспетчере устройств → Порты (COM и LPT)» найдите номер `ST-LINK Virtual COM Port`, например `COM5`.
-2. В PuTTY выберите `Session → Connection type: Serial`, задайте этот COM-порт и скорость `115200`.
-3. В `Connection → Serial` установите параметры:
+### PuTTY setup
 
-   | Параметр     | Значение |
-   | ------------ | -------- |
-   | Speed        | `115200` |
-   | Data bits    | `8`      |
-   | Stop bits    | `1`      |
-   | Parity       | `None`   |
-   | Flow control | `None`   |
+1. In `Device Manager → Ports (COM & LPT)`, find the `ST-LINK Virtual COM Port` number, for example `COM5`.
+2. In PuTTY select `Session → Connection type: Serial`, enter that COM port and `115200` baud.
+3. In `Connection → Serial`, use:
 
-4. Нажмите `Open`, затем запустите программу на плате.
+   | Setting | Value |
+   | --- | --- |
+   | Speed | `115200` |
+   | Data bits | `8` |
+   | Stop bits | `1` |
+   | Parity | `None` |
+   | Flow control | `None` |
 
-Используется `USART3`: `PD8` — TX, `PD9` — RX. На `NUCLEO-F767ZI` эти линии подключены к встроенному ST-LINK Virtual COM Port согласно [`demonstration.ioc`](demonstration.ioc). При переносе на другую плату проверьте физическое соединение этих выводов со ST-LINK и при необходимости измените UART-пины в `.ioc`. UART служит только для журнала: внутри измеряемого окна профилей он не вызывается.
+4. Click `Open`, then start the program on the board.
 
-## Результат по умолчанию
+The project uses `USART3`: `PD8` is TX and `PD9` is RX. On `NUCLEO-F767ZI`, these pins connect to the onboard ST-LINK Virtual COM Port; see [`demonstration.ioc`](demonstration.ioc). When moving to another board, verify the physical connection and update the UART pins in the `.ioc` file if required. UART is used only for logging and is never called inside a profiling window.
 
-Текущие переключатели находятся в [`Core/Src/main.c`](Core/Src/main.c):
+## Default result
+
+The default switches are in [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h):
 
 ```c
 #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U65
@@ -50,143 +52,139 @@
 #define EXPERIMENT_MODE EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
 ```
 
-| Параметр       | Значение                               |
-| -------------- | -------------------------------------- |
-| Планировщик    | `SCHED_ALGO_SUPERLOOP`                 |
-| Сценарий       | `U65`                                  |
-| Режим          | `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` |
-| Окно измерения | `60 000 000 us` (60 секунд)            |
+| Setting | Default |
+| --- | --- |
+| Scheduler | `SCHED_ALGO_SUPERLOOP` |
+| Scenario | `U65` |
+| Experiment mode | `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` |
+| Measurement window | `60,000,000 us` (60 seconds) |
 
-После окна терминал выведет `=== CLEAN SUPERLOOP PROFILE ===` и строку `CSV_CLEAN_SUPERLOOP,...`. Сохраните CSV-строку в файл или таблицу для обработки. Если PuTTY был открыт после запуска, перезапустите программу: профиль уже мог отправить свой единственный результат.
+After the window, the terminal prints `=== CLEAN SUPERLOOP PROFILE ===` and a `CSV_CLEAN_SUPERLOOP,...` row. Save the CSV row to a file or spreadsheet for processing. If PuTTY was opened after the firmware started, restart the program: it may have already emitted its only result.
 
-## Автоматический сбор серии экспериментов
+## Automated experiment series
 
-Для прогона множества сценариев и окон без ручного переключения макросов и PuTTY используйте [`tools/experiment_runner/`](tools/experiment_runner/). Python-скрипт сам собирает и прошивает каждую конфигурацию, читает ST-LINK virtual COM port, сохраняет отдельный UART-лог и объединяет полученные CSV-строки в `results/<время>/summary.csv`.
+To run many scenarios and windows without manually changing macros or using PuTTY, use [`tools/experiment_runner/`](tools/experiment_runner/). The Python script builds and flashes each configuration, reads the ST-LINK Virtual COM Port, saves a separate UART log, and combines CSV rows in `results/<timestamp>/summary.csv`.
 
-Готовая матрица включает `U50`–`U100`, окна 10/30/60/100/250/500/1000 секунд и режимы Clean/Checks — всего 84 запуска. Подробная установка и команда запуска находятся в [инструкции автоматизации](tools/experiment_runner/README.md). Результаты игнорируются Git; временная headless-workspace CubeIDE создаётся вне репозитория.
+The supplied matrix contains `U50`–`U100`, windows of 10/30/60/100/250/500/1000 seconds, and Clean/Checks modes: 84 runs in total. See the [automation guide](tools/experiment_runner/README.md) for setup and the command to run it. Results are ignored by Git; the temporary CubeIDE headless workspace is created outside the repository.
 
-## Настройка эксперимента
+## Configuring an experiment
 
-Измените константы в начале [`Core/Src/main.c`](Core/Src/main.c), сохраните файл и пересоберите проект.
+Edit [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h) for the primary defaults, then rebuild and reflash the board. The advanced switches explicitly marked as being in `main.c` remain in [`Core/Src/main.c`](Core/Src/main.c).
 
-### Основные параметры
+### Main parameters
 
-| Макрос                                                          | Что можно изменить                                                                                                |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `WORKLOAD_SCENARIO`                                             | Сценарий нагрузки `U50`–`U110`.                                                                                   |
-| `SCHED_ALGO`                                                    | Алгоритм интегрированного эксперимента: Superloop, EDF или Chunked EDF. В режимах 3 и 4 не используется.          |
-| `EXPERIMENT_MODE`                                               | Тип запуска и собираемой статистики.                                                                              |
-| `MINIMAL_PROFILE_WINDOW_US`                                     | Длительность окна режимов 3 и 4. По умолчанию `60000000ULL` — 60 секунд.                                          |
-| `PROFILE_WINDOW_US`                                             | Длительность окна интегрированного профиля. По умолчанию `10000000ULL` — 10 секунд.                               |
-| `EDF_CHUNK_US`                                                  | Размер части синтетической работы в Chunked EDF.                                                                  |
-| `SCHEDULER_MODE`                                                | Режим ожидания интегрированного планировщика: busy-polling или WFI. Профили 3 и 4 всегда используют busy-polling. |
-| `ENABLE_SYNTH_IMU`, `ENABLE_SYNTH_LIDAR`, `ENABLE_SYNTH_CAMERA` | Включение синтетических задач интегрированного режима.                                                            |
-| `ENABLE_REAL_TAU1`, `ENABLE_REAL_TAU2`                          | Включение реальных HC-SR04 и DHT11; для запуска без датчиков оставьте `0`.                                        |
+| Macro | What it controls |
+| --- | --- |
+| `WORKLOAD_SCENARIO` | Workload scenario `U50`–`U110`. |
+| `SCHED_ALGO` | Scheduler of the integrated experiment: Superloop, EDF, or Chunked EDF. It is not used by modes 3 and 4. |
+| `EXPERIMENT_MODE` | Run type and collected statistics. |
+| `MINIMAL_PROFILE_WINDOW_US` | Window for modes 3 and 4; `60000000ULL` (60 seconds) by default. |
+| `PROFILE_WINDOW_US` | Window for integrated profiling; `10000000ULL` (10 seconds) by default. |
+| `EDF_CHUNK_US` | Synthetic-work chunk size in Chunked EDF. |
+| `SCHEDULER_MODE` (`main.c`) | Idle policy of the integrated scheduler: busy polling or WFI. Modes 3 and 4 always use busy polling. |
+| `ENABLE_SYNTH_IMU`, `ENABLE_SYNTH_LIDAR`, `ENABLE_SYNTH_CAMERA` (`main.c`) | Enable synthetic tasks in the integrated mode. |
+| `ENABLE_REAL_TAU1`, `ENABLE_REAL_TAU2` (`main.c`) | Enable the HC-SR04 and DHT11 tasks; leave both at `0` when no sensors are connected. |
 
-Все значения времени задаются в микросекундах и имеют суффикс `ULL`. После изменения любого макроса требуется новая сборка и прошивка платы. Для сопоставимых измерений запускайте сравниваемые режимы с одинаковыми сценарием и длительностью окна.
+All time values are microseconds and use the `ULL` suffix. Rebuild and reflash after changing any macro. For comparable measurements, use the same scenario and window duration for each mode.
 
-### Сценарии нагрузки
+### Workload scenarios
 
-`U` — целевая суммарная загрузка синтетическими задачами.
+`U` is the target total utilization of the synthetic tasks.
 
-| Константа                | Загрузка                      |
-| ------------------------ | ----------------------------- |
-| `WORKLOAD_SCENARIO_U50`  | 50 %                          |
-| `WORKLOAD_SCENARIO_U65`  | 65 %                          |
-| `WORKLOAD_SCENARIO_U80`  | 80 %                          |
-| `WORKLOAD_SCENARIO_U90`  | 90 %                          |
-| `WORKLOAD_SCENARIO_U95`  | 95 %                          |
-| `WORKLOAD_SCENARIO_U100` | 100 %                         |
-| `WORKLOAD_SCENARIO_U110` | 110 %, перегруженный сценарий |
+| Constant | Utilization |
+| --- | --- |
+| `WORKLOAD_SCENARIO_U50` | 50% |
+| `WORKLOAD_SCENARIO_U65` | 65% |
+| `WORKLOAD_SCENARIO_U80` | 80% |
+| `WORKLOAD_SCENARIO_U90` | 90% |
+| `WORKLOAD_SCENARIO_U95` | 95% |
+| `WORKLOAD_SCENARIO_U100` | 100% |
+| `WORKLOAD_SCENARIO_U110` | 110%, overloaded |
 
-Для профилей Superloop (режимы 3 и 4) доступны только `U50`–`U100`; `U110` поддерживается другими режимами.
+Only `U50`–`U100` are available in Superloop profile modes 3 and 4. `U110` is supported by the other modes.
 
-### Алгоритмы планирования
+### Scheduling algorithms
 
-| Константа                | Назначение                                                                                                                                                                                                   |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SCHED_ALGO_SUPERLOOP`   | Фиксированный невытесняющий порядок готовых задач.                                                                                                                                                           |
-| `SCHED_ALGO_EDF`         | Невытесняющий EDF: выбирается готовая задача с ближайшим абсолютным дедлайном и выполняется до завершения.                                                                                                   |
-| `SCHED_ALGO_CHUNKED_EDF` | EDF с кооперативным разбиением синтетической работы на части `EDF_CHUNK_US`; после каждого chunk планировщик повторно выбирает задачу. Это не аппаратное вытеснение и не переключение контекста прерыванием. |
+| Constant | Purpose |
+| --- | --- |
+| `SCHED_ALGO_SUPERLOOP` | Fixed non-preemptive order of ready tasks. |
+| `SCHED_ALGO_EDF` | Non-preemptive EDF: selects the ready task with the nearest absolute deadline and runs it to completion. |
+| `SCHED_ALGO_CHUNKED_EDF` | EDF with synthetic work split into `EDF_CHUNK_US` chunks; the scheduler chooses again after each chunk. This is cooperative scheduling, not hardware preemption or interrupt-driven context switching. |
 
-### Режимы экспериментов
+### Experiment modes
 
-| Константа                                    | Что делает                                                                                                                               |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `EXPERIMENT_INTEGRATED` (`0`)                | Основной эксперимент со статистикой задач и планировщика: выполнение, response time, deadline misses, skipped releases и другие метрики. |
-| `EXPERIMENT_ISOLATED_TAU1` (`1`)             | Изолированное выполнение первой задачи.                                                                                                  |
-| `EXPERIMENT_ISOLATED_TAU2` (`2`)             | Изолированное выполнение второй задачи.                                                                                                  |
-| `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` (`3`) | Очищенный двухзадачный busy-polling Superloop. `SUPERLOOP_PCT` — доля окна вне тел синтетических задач.                                  |
-| `EXPERIMENT_SUPERLOOP_CHECKS_PROFILE` (`4`)  | Инструментированный DWT-профиль readiness-проверок и обслуживания releases.                                                              |
+| Constant | Purpose |
+| --- | --- |
+| `EXPERIMENT_INTEGRATED` (`0`) | Main experiment with task and scheduler statistics: execution, response time, deadline misses, skipped releases, and other metrics. |
+| `EXPERIMENT_ISOLATED_TAU1` (`1`) | Isolated execution of the first task. |
+| `EXPERIMENT_ISOLATED_TAU2` (`2`) | Isolated execution of the second task. |
+| `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` (`3`) | Clean two-task busy-polling Superloop. `SUPERLOOP_PCT` is the part of the window outside synthetic task bodies. |
+| `EXPERIMENT_SUPERLOOP_CHECKS_PROFILE` (`4`) | DWT-instrumented profile of readiness checks and release maintenance. |
 
-В режимах 3 и 4 значение `SCHED_ALGO` не используется: они запускают собственный двухзадачный busy-polling Superloop. `SCHED_ALGO` влияет на `EXPERIMENT_INTEGRATED`.
+In modes 3 and 4, `SCHED_ALGO` is not used: they run their own two-task busy-polling Superloop. `SCHED_ALGO` affects `EXPERIMENT_INTEGRATED` only.
 
-Режимы решают разные задачи и не должны смешиваться при интерпретации результатов:
+The modes answer different questions and should not be mixed during interpretation:
 
-- `EXPERIMENT_INTEGRATED` предназначен для анализа schedulability и статистики задач: response time, deadline misses, skipped releases и других метрик.
-- `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` измеряет общую стоимость очищенного busy-polling Superloop. Физического sleep/idle в нём нет; `SUPERLOOP_PCT` включает polling/check logic и минимальную инструментальную обвязку эксперимента.
-- `EXPERIMENT_SUPERLOOP_CHECKS_PROFILE` детализирует время readiness-проверок и обслуживания releases, но намеренно добавляет DWT instrumentation overhead.
+- `EXPERIMENT_INTEGRATED` is for schedulability and task statistics: response time, deadline misses, skipped releases, and related metrics.
+- `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` measures the overall cost of the cleaned busy-polling Superloop. It has no physical sleep or idle state; `SUPERLOOP_PCT` includes polling/check logic and minimal experiment instrumentation.
+- `EXPERIMENT_SUPERLOOP_CHECKS_PROFILE` breaks down readiness checks and release maintenance, but deliberately adds DWT instrumentation overhead.
 
-Поэтому `CHECKS_PCT` режима 4 нельзя считать чистой общей стоимостью Superloop. Для общей стоимости используйте `SUPERLOOP_PCT` из режима 3. Отношение `CHECKS_PCT / SUPERLOOP_PCT` можно вычислить вне STM32-кода как приблизительную оценку доли общего Superloop overhead, объясняемую readiness-проверками и обслуживанием releases.
+Therefore, mode 4's `CHECKS_PCT` is not the clean total Superloop cost. Use mode 3's `SUPERLOOP_PCT` for that value. `CHECKS_PCT / SUPERLOOP_PCT` can be calculated outside the firmware as an approximate share of overall Superloop overhead explained by readiness checks and release maintenance.
 
-## Задачи
+## Tasks
 
-В интегрированном режиме по умолчанию включены три синтетические задачи:
+The integrated mode enables three synthetic tasks by default:
 
-| Задача | Период |
-| ------ | ------ |
-| IMU    | 10 ms  |
-| LiDAR  | 50 ms  |
+| Task | Period |
+| --- | --- |
+| IMU | 10 ms |
+| LiDAR | 50 ms |
 | Camera | 200 ms |
 
-Их время выполнения зависит от `Uxx`. Датчики HC-SR04 и DHT11 сейчас выключены (`ENABLE_REAL_TAU1` и `ENABLE_REAL_TAU2` равны `0`), поэтому внешние датчики не нужны.
+Their execution time depends on `Uxx`. HC-SR04 and DHT11 are currently disabled (`ENABLE_REAL_TAU1` and `ENABLE_REAL_TAU2` are `0`), so no external sensors are required.
 
-Профили Superloop используют другой набор: `tau1` с периодом 10 ms и `tau2` с периодом 50 ms. Их нагрузки задаются макросами `MINIMAL_TAU1_WORKLOAD_US` и `MINIMAL_TAU2_WORKLOAD_US`.
+Superloop profiles use a different pair: `tau1` has a 10 ms period and `tau2` a 50 ms period. Their workload is controlled by `MINIMAL_TAU1_WORKLOAD_US` and `MINIMAL_TAU2_WORKLOAD_US`.
 
-## Дальнейшая работа
+## Further work
 
-Текущий этап проекта сосредоточен на воспроизводимом сравнении Superloop, EDF и Chunked EDF на синтетических периодических задачах, а также на измерении накладных расходов планировщиков.
+The current project stage focuses on reproducible comparison of Superloop, EDF, and Chunked EDF on synthetic periodic tasks, and on measuring scheduler overhead.
 
-Следующий этап исследования будет посвящён развитию и оптимизации Chunked EDF при работе с реальными задачами и сенсорами. Планируется перенести подход с разбиением работы на части с синтетических workloads на реальные операции ввода-вывода и исследовать ограничения, которые возникают на аппаратной платформе.
+The next stage will develop and optimize Chunked EDF with real tasks and sensors. Planned work includes moving chunking from synthetic workloads to real I/O operations and studying platform limitations.
 
-Основные направления дальнейшей работы:
+- Test Chunked EDF with real sensors.
+- Identify blocking operations and other sources of increased response time and deadline misses.
+- Profile Chunked EDF overhead under real load.
+- Study the effect of `EDF_CHUNK_US` on schedulability and overhead.
+- Optimize execution and task reselection between chunks.
+- Compare deadline misses, skipped releases, response time, and CPU cost before and after optimization.
 
-- тестирование Chunked EDF с реальными сенсорами;
-- выявление блокирующих операций и других причин увеличения response time и deadline misses;
-- профилирование накладных расходов Chunked EDF на реальной нагрузке;
-- исследование влияния размера `EDF_CHUNK_US` на schedulability и overhead;
-- оптимизация механизма выполнения и повторного выбора задач между chunks;
-- сравнение поведения до и после оптимизаций по deadline misses, skipped releases, response time и затратам CPU;
-- проверка того, сохраняются ли преимущества Chunked EDF при переходе от синтетических workloads к реальным периферийным операциям.
+## Repository layout
 
-Таким образом, текущая реализация Chunked EDF рассматривается не как конечный вариант планировщика, а как базовая экспериментальная реализация для дальнейшего профилирования и оптимизации на реальной аппаратной нагрузке.
+| Path | Contents |
+| --- | --- |
+| [`Core/`](Core/) | Application code, including [`main.c`](Core/Src/main.c), interrupt handlers, and system files. |
+| [`Drivers/`](Drivers/) | STM32F7 HAL and CMSIS. |
+| [`docs/references/`](docs/references/) | Papers and other sources. |
+| [`docs/presentation/`](docs/presentation/) | Presentation and system-model figures. |
+| [`notebooks/`](notebooks/) | Colab notebook for result processing and plots. |
+| [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation. |
+| [`demonstration.ioc`](demonstration.ioc) | CubeMX configuration: peripherals, pins, and clocks. |
+| [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | STM32CubeIDE/Eclipse project files. |
+| [`demonstration Debug.launch`](<demonstration Debug.launch>) | IDE run and debug configuration. |
 
-## Структура репозитория
+`Debug/` and `Release/` are generated build outputs. `node_modules/` contains JavaScript dependencies. They are ignored by Git and must not be committed.
 
-| Путь                                                                                                     | Содержимое                                                                                     |
-| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`Core/`](Core/)                                                                                         | Код приложения, включая [`main.c`](Core/Src/main.c), обработчики прерываний и системные файлы. |
-| [`Drivers/`](Drivers/)                                                                                   | HAL и CMSIS для STM32F7.                                                                       |
-| [`docs/references/`](docs/references/)                                                                   | Научные статьи и использованные источники.                                                     |
-| [`docs/presentation/`](docs/presentation/)                                                               | Презентация и рисунки системной модели.                                                        |
-| [`notebooks/`](notebooks/)                                                                               | Colab notebook с обработкой результатов и графиками.                                           |
-| [`demonstration.ioc`](demonstration.ioc)                                                                 | Конфигурация CubeMX: периферия, выводы и тактирование.                                         |
-| [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | Файлы STM32CubeIDE/Eclipse для импорта проекта.                                                |
-| [`demonstration Debug.launch`](<demonstration Debug.launch>)                                             | Конфигурация запуска и отладки IDE.                                                            |
+## Troubleshooting
 
-`Debug/` и `Release/` — генерируемые результаты сборки; `node_modules/` — зависимости JavaScript. Они игнорируются Git и не должны добавляться в репозиторий.
+| Symptom | Check |
+| --- | --- |
+| No COM port | Use a data-capable cable; check ST-LINK and its driver in Device Manager. |
+| Garbled text | Set `115200`, `8N1`, `Parity=None`, and `Flow control=None`. |
+| No output | Open the correct COM port before starting. In modes 3 and 4, wait 60 seconds, then restart the board if necessary. |
+| Project does not build | Import the repository root and install STM32Cube FW F7 in STM32CubeIDE. |
+| Board cannot be programmed | Close applications using ST-LINK or the COM port, reconnect the board, and retry `Debug`. |
 
-## Типичные проблемы
+## Additional materials
 
-| Симптом              | Что проверить                                                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------------------- |
-| Нет COM-порта        | Кабель должен передавать данные; проверьте ST-LINK и драйвер в «Диспетчере устройств».                   |
-| Нечитаемый текст     | Установите `115200`, `8N1`, `Parity=None`, `Flow control=None`.                                          |
-| Нет вывода           | Откройте правильный COM-порт до запуска; в режимах 3 и 4 дождитесь 60 секунд; затем перезапустите плату. |
-| Проект не собирается | Импортируйте корень репозитория и установите STM32Cube FW F7 в STM32CubeIDE.                             |
-| Не прошивается плата | Закройте программы, занявшие ST-LINK/COM-порт, переподключите плату и повторите `Debug`.                 |
-
-## Дополнительные материалы
-
-- [Презентация проекта](https://docs.google.com/presentation/d/1G00Xcs1oBs7-omI5czPnljay-vytueP_O6MEM0KGgIo/edit?usp=sharing)
-- [Google Colab: графики и обработка результатов](https://colab.research.google.com/drive/1k7JMMJAk3bt3nKziyVm84fFln8bctSOF?usp=sharing)
+- [Project presentation](https://docs.google.com/presentation/d/1G00Xcs1oBs7-omI5czPnljay-vytueP_O6MEM0KGgIo/edit?usp=sharing)
+- [Google Colab: plots and result processing](https://colab.research.google.com/drive/1k7JMMJAk3bt3nKziyVm84fFln8bctSOF?usp=sharing)

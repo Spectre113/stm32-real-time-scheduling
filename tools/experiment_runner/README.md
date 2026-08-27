@@ -1,60 +1,63 @@
-# Автоматический сбор профилей Superloop
+# Automated Superloop Profile Collection
 
-`run_matrix.py` выполняет матрицу экспериментов без PuTTY: на каждом запуске он меняет конфигурацию прошивки, собирает её, прошивает плату через ST-LINK, читает UART и сохраняет результаты.
+[Русская версия](README.ru.md)
 
-## Что устанавливается один раз
+`run_matrix.py` runs an experiment matrix without PuTTY. For every run, it changes the firmware configuration, builds the project, flashes the board through ST-LINK, reads UART, and stores the result.
 
-1. STM32CubeIDE с STM32Cube FW F7.
+## One-time setup
+
+1. STM32CubeIDE with STM32Cube FW F7.
 2. STM32CubeProgrammer.
-3. Python 3.10 или новее и зависимость UART:
+3. Python 3.10 or later and the UART dependency:
 
    ```powershell
    py -m pip install -r tools\experiment_runner\requirements.txt
    ```
 
-Найдите два исполняемых файла. Типичные пути в Windows:
+Locate the two executables. Typical Windows locations are:
 
 ```text
-C:\ST\STM32CubeIDE_<версия>\STM32CubeIDE\headless-build.bat
+C:\ST\STM32CubeIDE_<version>\STM32CubeIDE\headless-build.bat
 C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe
 ```
 
-Перед запуском закройте STM32CubeIDE, если она открыла ту же workspace, и закройте PuTTY: COM-порт должен быть свободен для скрипта.
+Close STM32CubeIDE if it is using the same workspace, and close PuTTY: the script needs exclusive access to the COM port.
 
-## Полный прогон
+## Full run
 
-Подключите `NUCLEO-F767ZI`, узнайте номер ST-LINK Virtual COM Port и выполните из корня репозитория:
+Connect the `NUCLEO-F767ZI`, find its ST-LINK Virtual COM Port number, then run this command from the repository root:
 
 ```powershell
 py tools\experiment_runner\run_matrix.py `
   --port COM5 `
-  --headless-builder "C:\ST\STM32CubeIDE_<версия>\STM32CubeIDE\headless-build.bat" `
+  --headless-builder "C:\ST\STM32CubeIDE_<version>\STM32CubeIDE\headless-build.bat" `
   --programmer "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
 ```
 
-`matrix.default.json` задаёт 84 запуска: `U50`–`U100`, окна 10/30/60/100/250/500/1000 секунд, режимы `clean` и `checks`. Только суммарная длительность измеряемых окон составляет 390 минут; добавьте время на 84 сборки и прошивки.
+`matrix.default.json` defines 84 runs: `U50`–`U100`, windows of 10/30/60/100/250/500/1000 seconds, and the `clean` and `checks` modes. The measurement windows alone take 390 minutes; allow additional time for 84 builds and flashes.
 
-Для безопасной проверки без платы:
+For a safe check without touching the board:
 
 ```powershell
 py tools\experiment_runner\run_matrix.py --port COM5 --headless-builder C:\path\headless-build.bat --programmer C:\path\STM32_Programmer_CLI.exe --dry-run
 ```
 
-## Результаты
+## Results
 
-Каждая кампания создаёт отдельный каталог `results/<UTC-время>/`:
+Every campaign creates its own `results/<UTC timestamp>/` directory:
 
-- `summary.csv` — единая таблица всех запусков, включая запрошенные и реально выведенные параметры;
-- `raw/*.log` — полный UART-лог каждого запуска;
-- `build/*.log` и `build/*.flash.log` — журналы сборки и прошивки;
-- `matrix.json` — точная копия матрицы, использованной в кампании;
-- Временная headless-workspace STM32CubeIDE создаётся вне репозитория и не попадает в папку результатов.
+- `summary.csv` — one table with requested and reported parameters for all runs;
+- `raw/*.log` — the complete UART log of each run;
+- `build/*.log` and `build/*.flash.log` — build and flashing logs;
+- `matrix.json` — the exact matrix used for the campaign.
 
-Все эти файлы игнорируются Git. При сбое строка со `status=failed` и текстом ошибки всё равно добавляется в `summary.csv`; успешные запуски можно не повторять, если продолжить ту же кампанию с `--output-dir <каталог> --resume`.
+The temporary STM32CubeIDE headless workspace is created outside the repository and is not placed in the results directory.
 
-## Изменение матрицы
+All result files are ignored by Git. A failed run is still written to `summary.csv` with `status=failed` and an error message. To continue the same campaign without repeating successful runs, use `--output-dir <directory> --resume`.
 
-Скопируйте `matrix.default.json`, оставьте нужные сценарии, окна или режимы и передайте путь через `--matrix`. Например, короткая проверка одного режима:
+## Changing the matrix
+
+Copy `matrix.default.json`, keep the required scenarios, windows, and modes, then pass it with `--matrix`. For example, a short test of one mode:
 
 ```json
 {
@@ -65,4 +68,4 @@ py tools\experiment_runner\run_matrix.py --port COM5 --headless-builder C:\path\
 }
 ```
 
-Для каждого запуска скрипт временно переписывает [`Core/Inc/experiment_config.h`](../../Core/Inc/experiment_config.h), а в конце — даже при ошибке или `Ctrl+C` — восстанавливает исходное содержимое. После принудительного выключения ПК проверьте этот файл через `git diff` перед ручной сборкой.
+For each run, the script temporarily rewrites [`Core/Inc/experiment_config.h`](../../Core/Inc/experiment_config.h). It restores the original file even after an error or `Ctrl+C`. After a forced PC shutdown, check that file with `git diff` before a manual build.
