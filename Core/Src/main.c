@@ -13,6 +13,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <inttypes.h>
 
 /* USER CODE END Includes */
 
@@ -65,8 +66,8 @@
 #define WORKLOAD_SCENARIO_U100   5
 #define WORKLOAD_SCENARIO_U110   6
 
-#define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U90
-#define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
+#define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U65
+#define SCHED_ALGO SCHED_ALGO_SUPERLOOP
 
 #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
   #define TAU_IMU_WORKLOAD_US     1667ULL
@@ -162,14 +163,16 @@
 #define EXPERIMENT_ISOLATED_TAU1   1
 #define EXPERIMENT_ISOLATED_TAU2   2
 #define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE 3
+#define EXPERIMENT_SUPERLOOP_CHECKS_PROFILE 4
 
-#define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+#define EXPERIMENT_MODE EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
 
-#define MINIMAL_PROFILE_WINDOW_US 100000000ULL  // Use 1000000000ULL for a 1000 s run.
+#define MINIMAL_PROFILE_WINDOW_US 60000000ULL
 #define MINIMAL_TAU1_PERIOD_US 10000ULL
 #define MINIMAL_TAU2_PERIOD_US 50000ULL
 
-#if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
+#if (EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE) || \
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE)
   /* Dedicated two-task workloads; the existing three-task values stay unchanged. */
   #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
     #define MINIMAL_TAU1_WORKLOAD_US 2500ULL
@@ -441,6 +444,54 @@ static void uart_print(char *text)
 {
   HAL_UART_Transmit(&huart3, (uint8_t*)text, strlen(text), HAL_MAX_DELAY);
 }
+
+#if (EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE) || \
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE)
+static void uart_print_u64(uint64_t value)
+{
+  char digits[21];
+  uint32_t length = 0;
+
+  do
+  {
+    digits[length++] = (char)('0' + (value % 10ULL));
+    value /= 10ULL;
+  } while (value > 0ULL);
+
+  for (uint32_t i = 0; i < length / 2U; i++)
+  {
+    char digit = digits[i];
+    digits[i] = digits[length - 1U - i];
+    digits[length - 1U - i] = digit;
+  }
+
+  digits[length] = '\0';
+  uart_print(digits);
+}
+
+static void uart_print_percent_x10000(uint64_t value_us, uint64_t total_us)
+{
+  uint64_t percent_x10000 = (value_us * 1000000ULL) / total_us;
+  uint32_t fraction = (uint32_t)(percent_x10000 % 10000ULL);
+  char fraction_text[6];
+
+  uart_print_u64(percent_x10000 / 10000ULL);
+  fraction_text[0] = '.';
+  fraction_text[1] = (char)('0' + (fraction / 1000U));
+  fraction_text[2] = (char)('0' + ((fraction / 100U) % 10U));
+  fraction_text[3] = (char)('0' + ((fraction / 10U) % 10U));
+  fraction_text[4] = (char)('0' + (fraction % 10U));
+  fraction_text[5] = '\0';
+  uart_print(fraction_text);
+}
+
+static inline uint32_t Correct_DWT_Delta(uint32_t delta,
+                                         uint32_t measurement_overhead)
+{
+  return delta > measurement_overhead
+         ? delta - measurement_overhead : 0U;
+}
+#endif
 
 static int HCSR04_Read_cm(void)
 {
@@ -1879,119 +1930,365 @@ static void Run_Isolated_Tau2_Profile(void)
 }
 
 #if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
-/* Measures task-body execution time versus all other busy-polling Superloop time. */
+/* Measures task bodies and the remaining clean two-task busy-polling Superloop. */
 static void Run_Minimal_Superloop_Profile(void)
 {
   uint64_t profile_start_us;
+  uint64_t profile_end_us;
   uint64_t profile_finish_us;
   uint64_t profile_elapsed_us;
   uint64_t tau1_next_release_us;
   uint64_t tau2_next_release_us;
-  uint64_t tau1_exec_us = 0;
-  uint64_t tau2_exec_us = 0;
-  uint64_t task_exec_us;
-  uint64_t other_us;
+  uint64_t tau1_task_cycles = 0;
+  uint64_t tau2_task_cycles = 0;
+  uint64_t task_cycles;
+  uint64_t tau1_task_us;
+  uint64_t tau2_task_us;
+  uint64_t task_us;
+  uint64_t superloop_us;
+  uint32_t dwt_measurement_overhead_cycles = UINT32_MAX;
   uint32_t tau1_runs = 0;
   uint32_t tau2_runs = 0;
-  char msg[256];
 
-  profile_start_us = micros();
+  for (uint32_t i = 0; i < 1000U; i++)
+  {
+    uint32_t start_cycles = DWT->CYCCNT;
+    uint32_t end_cycles = DWT->CYCCNT;
+    uint32_t delta_cycles = end_cycles - start_cycles;
+
+    if (delta_cycles < dwt_measurement_overhead_cycles)
+    {
+      dwt_measurement_overhead_cycles = delta_cycles;
+    }
+  }
+
+  profile_start_us = scheduler_now_us();
+  profile_end_us = profile_start_us + MINIMAL_PROFILE_WINDOW_US;
   tau1_next_release_us = profile_start_us;
   tau2_next_release_us = profile_start_us;
 
-  while ((micros() - profile_start_us) < MINIMAL_PROFILE_WINDOW_US)
+  while (1)
   {
-    uint64_t now_us = micros();
+    uint64_t now_us = scheduler_now_us();
+
+    if ((int64_t)(now_us - profile_end_us) >= 0)
+    {
+      break;
+    }
 
     if (now_us >= tau1_next_release_us)
     {
-      uint64_t exec_start_us = micros();
+      uint32_t task_start_cycles = DWT->CYCCNT;
       Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
-      uint64_t exec_finish_us = micros();
+      uint32_t task_end_cycles = DWT->CYCCNT;
+      tau1_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
+                                            dwt_measurement_overhead_cycles);
 
-      tau1_exec_us += exec_finish_us - exec_start_us;
-      tau1_runs++;
+      uint64_t finish_us = scheduler_now_us();
       tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
 
-      while (exec_finish_us > tau1_next_release_us)
+      while (finish_us > tau1_next_release_us)
       {
         tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
       }
+
+      tau1_runs++;
+    }
+
+    now_us = scheduler_now_us();
+
+    if ((int64_t)(now_us - profile_end_us) >= 0)
+    {
+      break;
     }
 
     if (now_us >= tau2_next_release_us)
     {
-      uint64_t exec_start_us = micros();
+      uint32_t task_start_cycles = DWT->CYCCNT;
       Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
-      uint64_t exec_finish_us = micros();
+      uint32_t task_end_cycles = DWT->CYCCNT;
+      tau2_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
+                                            dwt_measurement_overhead_cycles);
 
-      tau2_exec_us += exec_finish_us - exec_start_us;
-      tau2_runs++;
+      uint64_t finish_us = scheduler_now_us();
       tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
 
-      while (exec_finish_us > tau2_next_release_us)
+      while (finish_us > tau2_next_release_us)
       {
         tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
       }
+
+      tau2_runs++;
     }
   }
 
-  profile_finish_us = micros();
+  profile_finish_us = scheduler_now_us();
   profile_elapsed_us = profile_finish_us - profile_start_us;
-  task_exec_us = tau1_exec_us + tau2_exec_us;
+  tau1_task_us = tau1_task_cycles / g_cycles_per_us;
+  tau2_task_us = tau2_task_cycles / g_cycles_per_us;
+  task_cycles = tau1_task_cycles + tau2_task_cycles;
+  task_us = task_cycles / g_cycles_per_us;
+  /* Includes end-window checks, task DWT measurements, and runs++ counters. */
+  superloop_us = profile_elapsed_us > task_us
+                 ? profile_elapsed_us - task_us : 0ULL;
 
-  if (task_exec_us <= profile_elapsed_us)
+  uart_print("\r\n=== CLEAN SUPERLOOP PROFILE ===\r\n");
+  uart_print("scenario: ");
+  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
+  uart_print("\r\nwindow_us: ");
+  uart_print_u64(profile_elapsed_us);
+  uart_print("\r\n\r\ntau1:\r\n  runs: ");
+  uart_print_u64(tau1_runs);
+  uart_print("\r\n  task_us: ");
+  uart_print_u64(tau1_task_us);
+  uart_print("\r\n\r\ntau2:\r\n  runs: ");
+  uart_print_u64(tau2_runs);
+  uart_print("\r\n  task_us: ");
+  uart_print_u64(tau2_task_us);
+  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
+  uart_print_u64(task_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nsuperloop:\r\n  total_us: ");
+  uart_print_u64(superloop_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
+  uart_print(" %\r\n");
+
+  uart_print("CSV_CLEAN_SUPERLOOP,SCENARIO=");
+  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
+  uart_print(",U=");
+  uart_print_u64(MINIMAL_WORKLOAD_UTILIZATION_PERCENT);
+  uart_print(",WINDOW_US=");
+  uart_print_u64(profile_elapsed_us);
+  uart_print(",TAU1_RUNS=");
+  uart_print_u64(tau1_runs);
+  uart_print(",TAU2_RUNS=");
+  uart_print_u64(tau2_runs);
+  uart_print(",TASK_US=");
+  uart_print_u64(task_us);
+  uart_print(",TASK_PCT=");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(",SUPERLOOP_US=");
+  uart_print_u64(superloop_us);
+  uart_print(",SUPERLOOP_PCT=");
+  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
+  uart_print("\r\n");
+
+  while (1)
   {
-    other_us = profile_elapsed_us - task_exec_us;
   }
-  else
+}
+#endif
+
+#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE
+/*
+ * Diagnostic profile only: DWT instrumentation is included in the measured
+ * checks. Use Run_Minimal_Superloop_Profile() for clean Superloop overhead.
+ */
+static void Run_Superloop_Checks_Profile(void)
+{
+  uint64_t profile_start_us;
+  uint64_t profile_end_us;
+  uint64_t profile_finish_us;
+  uint64_t profile_elapsed_us;
+  uint64_t tau1_next_release_us;
+  uint64_t tau2_next_release_us;
+  uint64_t readiness_cycles = 0;
+  uint64_t release_maintenance_cycles = 0;
+  uint64_t tau1_task_cycles = 0;
+  uint64_t tau2_task_cycles = 0;
+  uint64_t task_cycles;
+  uint64_t check_cycles;
+  uint64_t tau1_task_us;
+  uint64_t tau2_task_us;
+  uint64_t task_us;
+  uint64_t readiness_us;
+  uint64_t release_us;
+  uint64_t checks_us;
+  uint32_t dwt_measurement_overhead_cycles = UINT32_MAX;
+  uint32_t tau1_runs = 0;
+  uint32_t tau2_runs = 0;
+
+  for (uint32_t i = 0; i < 1000U; i++)
   {
-    other_us = 0;
+    uint32_t start_cycles = DWT->CYCCNT;
+    uint32_t end_cycles = DWT->CYCCNT;
+    uint32_t delta_cycles = end_cycles - start_cycles;
+
+    if (delta_cycles < dwt_measurement_overhead_cycles)
+    {
+      dwt_measurement_overhead_cycles = delta_cycles;
+    }
   }
 
-  uart_print("\r\n=== MINIMAL SUPERLOOP PROFILE ===\r\n");
-  snprintf(msg, sizeof(msg), "scenario: %s\r\n", MINIMAL_WORKLOAD_SCENARIO_NAME);
-  uart_print(msg);
-  snprintf(msg, sizeof(msg), "window_us: %llu\r\n", (unsigned long long)profile_elapsed_us);
-  uart_print(msg);
-  snprintf(msg, sizeof(msg),
-           "tau1: T=10000 us, C=%llu us, runs=%lu, exec_us=%llu\r\n",
-           (unsigned long long)MINIMAL_TAU1_WORKLOAD_US,
-           (unsigned long)tau1_runs, (unsigned long long)tau1_exec_us);
-  uart_print(msg);
-  snprintf(msg, sizeof(msg),
-           "tau2: T=50000 us, C=%llu us, runs=%lu, exec_us=%llu\r\n",
-           (unsigned long long)MINIMAL_TAU2_WORKLOAD_US,
-           (unsigned long)tau2_runs, (unsigned long long)tau2_exec_us);
-  uart_print(msg);
-  snprintf(msg, sizeof(msg), "task_exec_us: %llu\r\n", (unsigned long long)task_exec_us);
-  uart_print(msg);
-  snprintf(msg, sizeof(msg), "other_us: %llu\r\n", (unsigned long long)other_us);
-  uart_print(msg);
-  snprintf(msg, sizeof(msg), "task_percent: %llu.%04llu %%\r\n",
-           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
-           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) % 10000ULL));
-  uart_print(msg);
-  snprintf(msg, sizeof(msg), "other_percent: %llu.%04llu %%\r\n",
-           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
-           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) % 10000ULL));
-  uart_print(msg);
-  snprintf(msg, sizeof(msg),
-           "CSV_MINIMAL_SUPERLOOP,SCENARIO=%s,U=%u,WINDOW_US=%llu,TAU1_RUNS=%lu,TAU2_RUNS=%lu,TAU1_EXEC_US=%llu,TAU2_EXEC_US=%llu,TASK_EXEC_US=%llu,OTHER_US=%llu,TASK_PCT=%llu.%04llu,OTHER_PCT=%llu.%04llu\r\n",
-           MINIMAL_WORKLOAD_SCENARIO_NAME,
-           MINIMAL_WORKLOAD_UTILIZATION_PERCENT,
-           (unsigned long long)profile_elapsed_us,
-           (unsigned long)tau1_runs,
-           (unsigned long)tau2_runs,
-           (unsigned long long)tau1_exec_us,
-           (unsigned long long)tau2_exec_us,
-           (unsigned long long)task_exec_us,
-           (unsigned long long)other_us,
-           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
-           (unsigned long long)((task_exec_us * 1000000ULL / profile_elapsed_us) % 10000ULL),
-           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) / 10000ULL),
-           (unsigned long long)((other_us * 1000000ULL / profile_elapsed_us) % 10000ULL));
-  uart_print(msg);
+  profile_start_us = scheduler_now_us();
+  profile_end_us = profile_start_us + MINIMAL_PROFILE_WINDOW_US;
+  tau1_next_release_us = profile_start_us;
+  tau2_next_release_us = profile_start_us;
+
+  while (1)
+  {
+    uint32_t check_start_cycles = DWT->CYCCNT;
+    uint64_t now_us = scheduler_now_us();
+    uint8_t tau1_ready = ((int64_t)(now_us - tau1_next_release_us) >= 0);
+    uint32_t check_end_cycles = DWT->CYCCNT;
+
+    readiness_cycles += Correct_DWT_Delta(check_end_cycles - check_start_cycles,
+                                          dwt_measurement_overhead_cycles);
+
+    if ((int64_t)(now_us - profile_end_us) >= 0)
+    {
+      break;
+    }
+
+    if (tau1_ready)
+    {
+      uint32_t task_start_cycles = DWT->CYCCNT;
+      Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
+      uint32_t task_end_cycles = DWT->CYCCNT;
+
+      tau1_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
+                                            dwt_measurement_overhead_cycles);
+
+      uint32_t release_start_cycles = DWT->CYCCNT;
+      uint64_t finish_us = scheduler_now_us();
+
+      tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
+
+      while ((int64_t)(finish_us - tau1_next_release_us) > 0)
+      {
+        tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
+      }
+
+      uint32_t release_end_cycles = DWT->CYCCNT;
+      release_maintenance_cycles += Correct_DWT_Delta(
+          release_end_cycles - release_start_cycles,
+          dwt_measurement_overhead_cycles);
+      tau1_runs++;
+    }
+
+    check_start_cycles = DWT->CYCCNT;
+    now_us = scheduler_now_us();
+    uint8_t tau2_ready = ((int64_t)(now_us - tau2_next_release_us) >= 0);
+    check_end_cycles = DWT->CYCCNT;
+
+    readiness_cycles += Correct_DWT_Delta(check_end_cycles - check_start_cycles,
+                                          dwt_measurement_overhead_cycles);
+
+    if ((int64_t)(now_us - profile_end_us) >= 0)
+    {
+      break;
+    }
+
+    if (tau2_ready)
+    {
+      uint32_t task_start_cycles = DWT->CYCCNT;
+      Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
+      uint32_t task_end_cycles = DWT->CYCCNT;
+
+      tau2_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
+                                            dwt_measurement_overhead_cycles);
+
+      uint32_t release_start_cycles = DWT->CYCCNT;
+      uint64_t finish_us = scheduler_now_us();
+
+      tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
+
+      while ((int64_t)(finish_us - tau2_next_release_us) > 0)
+      {
+        tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
+      }
+
+      uint32_t release_end_cycles = DWT->CYCCNT;
+      release_maintenance_cycles += Correct_DWT_Delta(
+          release_end_cycles - release_start_cycles,
+          dwt_measurement_overhead_cycles);
+      tau2_runs++;
+    }
+  }
+
+  profile_finish_us = scheduler_now_us();
+  profile_elapsed_us = profile_finish_us - profile_start_us;
+  task_cycles = tau1_task_cycles + tau2_task_cycles;
+  check_cycles = readiness_cycles + release_maintenance_cycles;
+  tau1_task_us = tau1_task_cycles / g_cycles_per_us;
+  tau2_task_us = tau2_task_cycles / g_cycles_per_us;
+  task_us = task_cycles / g_cycles_per_us;
+  readiness_us = readiness_cycles / g_cycles_per_us;
+  release_us = release_maintenance_cycles / g_cycles_per_us;
+  checks_us = check_cycles / g_cycles_per_us;
+
+  uart_print("\r\n=== SUPERLOOP CHECKS PROFILE ===\r\n");
+  uart_print("scenario: ");
+  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
+  uart_print("\r\nwindow_us: ");
+  uart_print_u64(profile_elapsed_us);
+  uart_print("\r\n\r\ntau1:\r\n  runs: ");
+  uart_print_u64(tau1_runs);
+  uart_print("\r\n  task_us: ");
+  uart_print_u64(tau1_task_us);
+  uart_print("\r\n\r\ntau2:\r\n  runs: ");
+  uart_print_u64(tau2_runs);
+  uart_print("\r\n  task_us: ");
+  uart_print_u64(tau2_task_us);
+  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
+  uart_print_u64(task_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nreadiness_checks:\r\n  total_cycles: ");
+  uart_print_u64(readiness_cycles);
+  uart_print("\r\n  total_us: ");
+  uart_print_u64(readiness_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nrelease_maintenance:\r\n  total_cycles: ");
+  uart_print_u64(release_maintenance_cycles);
+  uart_print("\r\n  total_us: ");
+  uart_print_u64(release_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(release_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nmeasured_checks:\r\n  total_cycles: ");
+  uart_print_u64(check_cycles);
+  uart_print("\r\n  total_us: ");
+  uart_print_u64(checks_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(checks_us, profile_elapsed_us);
+  uart_print(" %\r\n");
+
+  uart_print("CSV_SUPERLOOP_CHECKS,SCENARIO=");
+  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
+  uart_print(",U=");
+  uart_print_u64(MINIMAL_WORKLOAD_UTILIZATION_PERCENT);
+  uart_print(",WINDOW_US=");
+  uart_print_u64(profile_elapsed_us);
+  uart_print(",TAU1_RUNS=");
+  uart_print_u64(tau1_runs);
+  uart_print(",TAU2_RUNS=");
+  uart_print_u64(tau2_runs);
+  uart_print(",TASK_US=");
+  uart_print_u64(task_us);
+  uart_print(",TASK_PCT=");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(",READINESS_CYCLES=");
+  uart_print_u64(readiness_cycles);
+  uart_print(",READINESS_US=");
+  uart_print_u64(readiness_us);
+  uart_print(",READINESS_PCT=");
+  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
+  uart_print(",RELEASE_CYCLES=");
+  uart_print_u64(release_maintenance_cycles);
+  uart_print(",RELEASE_US=");
+  uart_print_u64(release_us);
+  uart_print(",RELEASE_PCT=");
+  uart_print_percent_x10000(release_us, profile_elapsed_us);
+  uart_print(",CHECKS_CYCLES=");
+  uart_print_u64(check_cycles);
+  uart_print(",CHECKS_US=");
+  uart_print_u64(checks_us);
+  uart_print(",CHECKS_PCT=");
+  uart_print_percent_x10000(checks_us, profile_elapsed_us);
+  uart_print("\r\n");
 
   while (1)
   {
@@ -2121,6 +2418,8 @@ int main(void)
 
   #if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
   Run_Minimal_Superloop_Profile();
+  #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE
+  Run_Superloop_Checks_Profile();
   #else
   char msg[128];
 
