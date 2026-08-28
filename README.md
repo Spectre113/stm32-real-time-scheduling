@@ -42,34 +42,34 @@ On Windows, STM32CubeIDE normally installs the ST-LINK driver. If no virtual COM
 
 The project uses `USART3`: `PD8` is TX and `PD9` is RX. On `NUCLEO-F767ZI`, these pins connect to the onboard ST-LINK Virtual COM Port; see [`demonstration.ioc`](demonstration.ioc). When moving to another board, verify the physical connection and update the UART pins in the `.ioc` file if required. UART is used only for logging and is never called inside a profiling window.
 
-## Default result
+## Current manual configuration
 
-The default switches are in [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h):
+The default switches are at the top of [`Core/Src/main.c`](Core/Src/main.c):
 
 ```c
-#define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U65
+#define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U50
 #define SCHED_ALGO SCHED_ALGO_SUPERLOOP
-#define EXPERIMENT_MODE EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
+#define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
 ```
 
 | Setting | Default |
 | --- | --- |
 | Scheduler | `SCHED_ALGO_SUPERLOOP` |
-| Scenario | `U65` |
-| Experiment mode | `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` |
+| Scenario | `U50` |
+| Experiment mode | `EXPERIMENT_INTEGRATED` |
 | Measurement window | `60,000,000 us` (60 seconds) |
 
-After the window, the terminal prints `=== CLEAN SUPERLOOP PROFILE ===` and a `CSV_CLEAN_SUPERLOOP,...` row. Save the CSV row to a file or spreadsheet for processing. If PuTTY was opened after the firmware started, restart the program: it may have already emitted its only result.
+The integrated mode prints `CSV_RUN,...` and `CSV_TASK,...` rows after its window. Other modes print the CSV row described in their mode entry below. Save the CSV output to a file or spreadsheet for processing. If PuTTY was opened after the firmware started, restart the program: it may have already emitted its only result.
 
 ## Automated experiment series
 
-To run many scenarios and windows without manually changing macros or using PuTTY, use [`tools/experiment_runner/`](tools/experiment_runner/). The Python script builds and flashes each configuration, reads the ST-LINK Virtual COM Port, saves a separate UART log, and combines CSV rows in `results/<timestamp>/summary.csv`.
+To run many scenarios and windows without manually changing macros or using PuTTY, use [`tools/experiment_runner/`](tools/experiment_runner/). The Python script builds and flashes each configuration, reads the ST-LINK Virtual COM Port, saves a separate UART log, and combines CSV rows in `results/<timestamp>/summary.csv`. During an automated run, temporary overrides disable physical sensors and debug UART output, and enable the standard synthetic tasks; your manual switches in `main.c` remain unchanged after the run.
 
 The supplied matrix contains `U50`-`U100`, windows of 10/30/60/100/250/500/1000 seconds, and Clean/Checks modes: 84 runs in total. Separate matrices cover Superloop scalability (12 runs) and full-statistics integrated Superloop profiling (24 runs), without repeating the default campaign. See the [automation guide](tools/experiment_runner/README.md) for setup and commands. Results are ignored by Git; the temporary CubeIDE headless workspace is created outside the repository.
 
 ## Configuring an experiment
 
-Edit [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h) for the primary defaults, then rebuild and reflash the board. The advanced switches explicitly marked as being in `main.c` remain in [`Core/Src/main.c`](Core/Src/main.c).
+Edit the documented configuration block at the top of [`Core/Src/main.c`](Core/Src/main.c), then rebuild and reflash the board. [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h) is reserved for temporary overrides from the automation runner and normally stays unchanged.
 
 ### Main parameters
 
@@ -82,11 +82,13 @@ Edit [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h) for the prim
 | `MINIMAL_PROFILE_WINDOW_US` | Window for modes 3 and 4; `60000000ULL` (60 seconds) by default. |
 | `SCALABILITY_PROFILE_WINDOW_US` | Window for scalability modes 5 and 6; `60000000ULL` (60 seconds) by default. |
 | `SCALABILITY_TASK_COUNT` | Active synthetic task count in modes 5 and 6: only `2`, `3`, or `4`. |
-| `PROFILE_WINDOW_US` | Window for integrated profiling; `10000000ULL` (10 seconds) by default. |
+| `PROFILE_WINDOW_US` | Window for integrated profiling; `60000000ULL` (60 seconds) in the current manual configuration. |
 | `EDF_CHUNK_US` | Synthetic-work chunk size in Chunked EDF. |
-| `SCHEDULER_MODE` (`main.c`) | Idle policy of the integrated scheduler: busy polling or WFI. Modes 3 and 4 always use busy polling. |
-| `ENABLE_SYNTH_IMU`, `ENABLE_SYNTH_LIDAR`, `ENABLE_SYNTH_CAMERA` (`main.c`) | Enable synthetic tasks in the integrated mode. |
-| `ENABLE_REAL_TAU1`, `ENABLE_REAL_TAU2` (`main.c`) | Enable the HC-SR04 and DHT11 tasks; leave both at `0` when no sensors are connected. |
+| `SCHEDULER_MODE` | Idle policy of the integrated scheduler: busy polling or WFI. Modes 3 and 4 always use busy polling. |
+| `ENABLE_SYNTH_IMU`, `ENABLE_SYNTH_LIDAR`, `ENABLE_SYNTH_CONTROL` | Enable optional synthetic tasks in the integrated mode; Camera follows `INTEGRATED_SYNTH_TASK_COUNT`. |
+| `ENABLE_REAL_TAU1`, `ENABLE_REAL_TAU2` | Enable the HC-SR04 and DHT11 tasks; set each to `0` when that sensor is not connected. |
+| `ENABLE_DEBUG_PRINT` | Enable periodic debug UART output. Keep it at `0` during measurements. |
+| `ENABLE_POLLING_PROFILE` | Enable full polling statistics for the integrated experiment. |
 
 All time values are microseconds and use the `ULL` suffix. Rebuild and reflash after changing any macro. For comparable measurements, use the same scenario and window duration for each mode.
 

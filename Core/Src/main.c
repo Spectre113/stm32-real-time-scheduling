@@ -20,58 +20,22 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-#define HCSR04_TRIG_PORT GPIOB
-#define HCSR04_TRIG_PIN  GPIO_PIN_2
+/*
+ * ============================================================================
+ * Manual experiment configuration - edit the switches in this block.
+ *
+ * The automation runner temporarily supplies overrides through
+ * Core/Inc/experiment_config.h. For a normal CubeIDE build this file is empty,
+ * so the values below are used. Rebuild and flash after changing a switch.
+ * ============================================================================
+ */
 
-#define HCSR04_ECHO_PORT GPIOC
-#define HCSR04_ECHO_PIN  GPIO_PIN_0
-
-#define HCSR04_TIMEOUT_US 30000
-
-#define DHT11_PORT GPIOA
-#define DHT11_PIN  GPIO_PIN_5
-
-#include "experiment_config.h"
-
-#define TAU1_PERIOD_US 100000        // 100 ms, ultrasonic
-#define TAU2_PERIOD_US 2000000       // 2000 ms, DHT11
-
-#define TAU1_PERIOD_MS 100
-#define TAU2_PERIOD_MS 2000
-
-#define ENABLE_REAL_TAU1 0
-#define ENABLE_REAL_TAU2 0
-
-#ifndef INTEGRATED_SYNTH_TASK_COUNT
-#define INTEGRATED_SYNTH_TASK_COUNT 3
-#endif
-
-#if (INTEGRATED_SYNTH_TASK_COUNT < 2) || (INTEGRATED_SYNTH_TASK_COUNT > 3)
-#error "INTEGRATED_SYNTH_TASK_COUNT must be 2 or 3"
-#endif
-
-#define ENABLE_SYNTH_IMU 1
-#define ENABLE_SYNTH_LIDAR 1
-#if INTEGRATED_SYNTH_TASK_COUNT == 3
-  #define ENABLE_SYNTH_CAMERA 1
-#else
-  #define ENABLE_SYNTH_CAMERA 0
-#endif
-#define ENABLE_SYNTH_CONTROL 0
-
-#define TAU_IMU_PERIOD_US    10000ULL   // T_I = 10 ms
-#define TAU_IMU_PERIOD_MS    10
-
-#define TAU_LIDAR_PERIOD_US    50000ULL   // T_L = 50 ms
-#define TAU_LIDAR_PERIOD_MS    50
-
-#define TAU_CAMERA_PERIOD_US    200000ULL  // T_C = 200 ms
-#define TAU_CAMERA_PERIOD_MS    200
-
+/* Scheduler used only by EXPERIMENT_INTEGRATED. */
 #define SCHED_ALGO_SUPERLOOP    0
 #define SCHED_ALGO_EDF          1
 #define SCHED_ALGO_CHUNKED_EDF  2
 
+/* Workload scenarios: the U number is the target total synthetic utilization. */
 #define WORKLOAD_SCENARIO_U50    0
 #define WORKLOAD_SCENARIO_U65    1
 #define WORKLOAD_SCENARIO_U80    2
@@ -81,13 +45,130 @@
 #define WORKLOAD_SCENARIO_U110   6
 #define WORKLOAD_SCENARIO_U75    7
 
-#define EXPERIMENT_INTEGRATED      0
-#define EXPERIMENT_ISOLATED_TAU1   1
-#define EXPERIMENT_ISOLATED_TAU2   2
-#define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE 3
-#define EXPERIMENT_SUPERLOOP_CHECKS_PROFILE 4
-#define EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN 5
-#define EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS 6
+/* Choose one experiment mode below. */
+#define EXPERIMENT_INTEGRATED                    0  /* Full task and scheduler statistics. */
+#define EXPERIMENT_ISOLATED_TAU1                 1  /* Isolated first task. */
+#define EXPERIMENT_ISOLATED_TAU2                 2  /* Isolated second task. */
+#define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE     3  /* Clean two-task Superloop profile. */
+#define EXPERIMENT_SUPERLOOP_CHECKS_PROFILE      4  /* Readiness/release-check profile. */
+#define EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN   5  /* Clean 2/3/4-task Superloop profile. */
+#define EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS  6  /* 2/3/4-task checks profile. */
+
+/* Integrated scheduler idle policy. Profile modes always use busy polling. */
+#define SCHED_BUSY_POLLING   0
+#define SCHED_WFI_OPTIMIZED  1
+
+/* Autotest overrides are read before the manual defaults below. */
+#include "experiment_config.h"
+
+/* Primary choices for a manual CubeIDE build. Edit only the value in each define. */
+#ifndef WORKLOAD_SCENARIO
+  #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U50
+#endif
+
+#ifndef SCHED_ALGO
+  #define SCHED_ALGO SCHED_ALGO_SUPERLOOP
+#endif
+
+#ifndef EXPERIMENT_MODE
+  #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+#endif
+
+/* 2 = IMU + LiDAR; 3 = IMU + LiDAR + Camera (integrated mode only). */
+#ifndef INTEGRATED_SYNTH_TASK_COUNT
+  #define INTEGRATED_SYNTH_TASK_COUNT 2
+#endif
+
+/* Measurement windows, in microseconds. */
+#ifndef PROFILE_WINDOW_US
+  #define PROFILE_WINDOW_US 60000000ULL           /* Integrated profile: 60 s. */
+#endif
+
+#ifndef MINIMAL_PROFILE_WINDOW_US
+  #define MINIMAL_PROFILE_WINDOW_US 60000000ULL   /* Modes 3 and 4: 60 s. */
+#endif
+
+#ifndef SCALABILITY_PROFILE_WINDOW_US
+  #define SCALABILITY_PROFILE_WINDOW_US 60000000ULL /* Modes 5 and 6: 60 s. */
+#endif
+
+/* Modes 5 and 6 only: select 2, 3, or 4 synthetic tasks. */
+#ifndef SCALABILITY_TASK_COUNT
+  #define SCALABILITY_TASK_COUNT 2
+#endif
+
+/* Chunk size used only by SCHED_ALGO_CHUNKED_EDF. */
+#ifndef EDF_CHUNK_US
+  #define EDF_CHUNK_US 1000ULL
+#endif
+
+/* Real physical sensor tasks: HC-SR04 (tau1) and DHT11 (tau2). */
+#ifndef ENABLE_REAL_TAU1
+  #define ENABLE_REAL_TAU1 1  /* Set to 0 when HC-SR04 is not connected. */
+#endif
+
+#ifndef ENABLE_REAL_TAU2
+  #define ENABLE_REAL_TAU2 1  /* Set to 0 when DHT11 is not connected. */
+#endif
+
+/* Synthetic integrated tasks. Camera follows INTEGRATED_SYNTH_TASK_COUNT. */
+#ifndef ENABLE_SYNTH_IMU
+  #define ENABLE_SYNTH_IMU 0
+#endif
+
+#ifndef ENABLE_SYNTH_LIDAR
+  #define ENABLE_SYNTH_LIDAR 0
+#endif
+
+#ifndef ENABLE_SYNTH_CONTROL
+  #define ENABLE_SYNTH_CONTROL 0
+#endif
+
+/* UART debug output alters timing; use 0 for measurements. */
+#ifndef ENABLE_DEBUG_PRINT
+  #define ENABLE_DEBUG_PRINT 1
+#endif
+
+/* Full polling statistics are used by the integrated experiment. */
+#ifndef ENABLE_POLLING_PROFILE
+  #define ENABLE_POLLING_PROFILE 1
+#endif
+
+#ifndef SCHEDULER_MODE
+  #define SCHEDULER_MODE SCHED_BUSY_POLLING
+#endif
+
+/* Physical task pinout and periods. */
+#define HCSR04_TRIG_PORT GPIOB
+#define HCSR04_TRIG_PIN  GPIO_PIN_2
+#define HCSR04_ECHO_PORT GPIOC
+#define HCSR04_ECHO_PIN  GPIO_PIN_0
+#define HCSR04_TIMEOUT_US 30000
+
+#define DHT11_PORT GPIOA
+#define DHT11_PIN  GPIO_PIN_5
+
+#define TAU1_PERIOD_US 100000        // 100 ms, ultrasonic
+#define TAU2_PERIOD_US 2000000       // 2000 ms, DHT11
+#define TAU1_PERIOD_MS 100
+#define TAU2_PERIOD_MS 2000
+
+#if (INTEGRATED_SYNTH_TASK_COUNT < 2) || (INTEGRATED_SYNTH_TASK_COUNT > 3)
+#error "INTEGRATED_SYNTH_TASK_COUNT must be 2 or 3"
+#endif
+
+#if INTEGRATED_SYNTH_TASK_COUNT == 3
+  #define ENABLE_SYNTH_CAMERA 1
+#else
+  #define ENABLE_SYNTH_CAMERA 0
+#endif
+
+#define TAU_IMU_PERIOD_US    10000ULL   // T_I = 10 ms
+#define TAU_IMU_PERIOD_MS    10
+#define TAU_LIDAR_PERIOD_US    50000ULL // T_L = 50 ms
+#define TAU_LIDAR_PERIOD_MS    50
+#define TAU_CAMERA_PERIOD_US    200000ULL // T_C = 200 ms
+#define TAU_CAMERA_PERIOD_MS    200
 
 #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
   #define TAU_IMU_WORKLOAD_US     1667ULL
@@ -203,13 +284,7 @@
 
 #define DEBUG_PERIOD_US 1000000      // print every 1 second
 
-#define ENABLE_DEBUG_PRINT 0         // 0 = off during profiling, 1 = debug status print
 #define EXEC_HIST_BINS 10
-
-#define SCHED_BUSY_POLLING   0
-#define SCHED_WFI_OPTIMIZED  1
-
-#define SCHEDULER_MODE SCHED_BUSY_POLLING
 
 #if (SCHED_ALGO != SCHED_ALGO_SUPERLOOP) && \
     (SCHED_ALGO != SCHED_ALGO_EDF) && \
@@ -231,8 +306,6 @@
   #define SCHED_ALGO_NAME "SUPERLOOP"
   #define SCHED_CSV_CHUNK_US 0ULL
 #endif
-
-#define ENABLE_POLLING_PROFILE 1
 
 #define MINIMAL_TAU1_PERIOD_US 10000ULL
 #define MINIMAL_TAU2_PERIOD_US 50000ULL
@@ -476,7 +549,7 @@ static void Task_AdvanceRelease(Task_t *task, uint64_t now_us)
    * If the system is already past one or more future releases,
    * those jobs were not executed. Count them as skipped releases.
    */
-  while ((int64_t)(now_us - task->next_release_us) >= 0)
+  while ((int64_t)(now_us - task->next_release_us) > 0)
   {
     task->skipped_release_count++;
     task->total_timing_failures++;

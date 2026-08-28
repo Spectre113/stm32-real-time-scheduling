@@ -242,6 +242,14 @@ def render_config(spec: RunSpec, matrix: dict[str, Any]) -> str:
 #define SCALABILITY_PROFILE_WINDOW_US {scalability_window_us}ULL
 #define SCALABILITY_TASK_COUNT {scalability_task_count}
 #define EDF_CHUNK_US {edf_chunk_us}ULL
+#define ENABLE_REAL_TAU1 0
+#define ENABLE_REAL_TAU2 0
+#define ENABLE_SYNTH_IMU 1
+#define ENABLE_SYNTH_LIDAR 1
+#define ENABLE_SYNTH_CONTROL 0
+#define ENABLE_DEBUG_PRINT 0
+#define ENABLE_POLLING_PROFILE 1
+#define SCHEDULER_MODE SCHED_BUSY_POLLING
 
 #endif /* EXPERIMENT_CONFIG_H */
 """
