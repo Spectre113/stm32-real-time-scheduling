@@ -31,6 +31,8 @@
 #define DHT11_PORT GPIOA
 #define DHT11_PIN  GPIO_PIN_5
 
+#include "experiment_config.h"
+
 #define TAU1_PERIOD_US 100000        // 100 ms, ultrasonic
 #define TAU2_PERIOD_US 2000000       // 2000 ms, DHT11
 
@@ -40,9 +42,21 @@
 #define ENABLE_REAL_TAU1 0
 #define ENABLE_REAL_TAU2 0
 
+#ifndef INTEGRATED_SYNTH_TASK_COUNT
+#define INTEGRATED_SYNTH_TASK_COUNT 3
+#endif
+
+#if (INTEGRATED_SYNTH_TASK_COUNT < 2) || (INTEGRATED_SYNTH_TASK_COUNT > 3)
+#error "INTEGRATED_SYNTH_TASK_COUNT must be 2 or 3"
+#endif
+
 #define ENABLE_SYNTH_IMU 1
 #define ENABLE_SYNTH_LIDAR 1
-#define ENABLE_SYNTH_CAMERA 1
+#if INTEGRATED_SYNTH_TASK_COUNT == 3
+  #define ENABLE_SYNTH_CAMERA 1
+#else
+  #define ENABLE_SYNTH_CAMERA 0
+#endif
 #define ENABLE_SYNTH_CONTROL 0
 
 #define TAU_IMU_PERIOD_US    10000ULL   // T_I = 10 ms
@@ -65,14 +79,15 @@
 #define WORKLOAD_SCENARIO_U95    4
 #define WORKLOAD_SCENARIO_U100   5
 #define WORKLOAD_SCENARIO_U110   6
+#define WORKLOAD_SCENARIO_U75    7
 
 #define EXPERIMENT_INTEGRATED      0
 #define EXPERIMENT_ISOLATED_TAU1   1
 #define EXPERIMENT_ISOLATED_TAU2   2
 #define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE 3
 #define EXPERIMENT_SUPERLOOP_CHECKS_PROFILE 4
-
-#include "experiment_config.h"
+#define EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN 5
+#define EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS 6
 
 #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
   #define TAU_IMU_WORKLOAD_US     1667ULL
@@ -86,6 +101,12 @@
   #define TAU_CAMERA_WORKLOAD_US  28889ULL
   #define WORKLOAD_SCENARIO_NAME  "U65"
   #define WORKLOAD_UTILIZATION_PERCENT 65U
+#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U75
+  #define TAU_IMU_WORKLOAD_US     2500ULL
+  #define TAU_LIDAR_WORKLOAD_US   16667ULL
+  #define TAU_CAMERA_WORKLOAD_US  33332ULL
+  #define WORKLOAD_SCENARIO_NAME  "U75"
+  #define WORKLOAD_UTILIZATION_PERCENT 75U
 #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U80
   #define TAU_IMU_WORKLOAD_US     2667ULL
   #define TAU_LIDAR_WORKLOAD_US   17778ULL
@@ -120,10 +141,63 @@
   #error "Unsupported WORKLOAD_SCENARIO"
 #endif
 
-#define UTIL_X10000 \
+#if (EXPERIMENT_MODE == EXPERIMENT_INTEGRATED) && \
+    (INTEGRATED_SYNTH_TASK_COUNT == 2)
+  /* Re-normalize the remaining IMU/LiDAR 3:4 workload split to the target U. */
+  #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 2143ULL
+    #define TAU_LIDAR_WORKLOAD_US 14285ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 2786ULL
+    #define TAU_LIDAR_WORKLOAD_US 18570ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U75
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 3214ULL
+    #define TAU_LIDAR_WORKLOAD_US 21430ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U80
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 3429ULL
+    #define TAU_LIDAR_WORKLOAD_US 22855ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 3857ULL
+    #define TAU_LIDAR_WORKLOAD_US 25715ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U95
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 4071ULL
+    #define TAU_LIDAR_WORKLOAD_US 27145ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U100
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 4286ULL
+    #define TAU_LIDAR_WORKLOAD_US 28570ULL
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U110
+    #undef TAU_IMU_WORKLOAD_US
+    #undef TAU_LIDAR_WORKLOAD_US
+    #define TAU_IMU_WORKLOAD_US 4714ULL
+    #define TAU_LIDAR_WORKLOAD_US 31430ULL
+  #endif
+#endif
+
+#define UTIL_X10000_BASE \
   ((TAU_IMU_WORKLOAD_US * 10000ULL / TAU_IMU_PERIOD_US) + \
-   (TAU_LIDAR_WORKLOAD_US * 10000ULL / TAU_LIDAR_PERIOD_US) + \
-   (TAU_CAMERA_WORKLOAD_US * 10000ULL / TAU_CAMERA_PERIOD_US))
+   (TAU_LIDAR_WORKLOAD_US * 10000ULL / TAU_LIDAR_PERIOD_US))
+
+#if ENABLE_SYNTH_CAMERA
+  #define UTIL_X10000 \
+    (UTIL_X10000_BASE + \
+     (TAU_CAMERA_WORKLOAD_US * 10000ULL / TAU_CAMERA_PERIOD_US))
+#else
+  #define UTIL_X10000 UTIL_X10000_BASE
+#endif
 
 #define PROFILE_WINDOW_MS 10000UL
 
@@ -438,7 +512,9 @@ static void uart_print(char *text)
 }
 
 #if (EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE)
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE) || \
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN) || \
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS)
 static void uart_print_u64(uint64_t value)
 {
   char digits[21];
@@ -483,6 +559,55 @@ static inline uint32_t Correct_DWT_Delta(uint32_t delta,
   return delta > measurement_overhead
          ? delta - measurement_overhead : 0U;
 }
+#endif
+
+#if (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN) || \
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS)
+  #if (SCALABILITY_TASK_COUNT < 2) || (SCALABILITY_TASK_COUNT > 4)
+    #error "SCALABILITY_TASK_COUNT must be 2, 3, or 4"
+  #endif
+
+  #define SCALABILITY_TAU1_PERIOD_US 10000ULL
+  #define SCALABILITY_TAU2_PERIOD_US 20000ULL
+  #define SCALABILITY_TAU3_PERIOD_US 50000ULL
+  #define SCALABILITY_TAU4_PERIOD_US 100000ULL
+
+  #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
+    #define SCALABILITY_WORKLOAD_SCENARIO_NAME "U65"
+    #define SCALABILITY_WORKLOAD_UTILIZATION_PERCENT 65U
+    #if SCALABILITY_TASK_COUNT == 2
+      #define SCALABILITY_TAU1_WORKLOAD_US 3250ULL
+      #define SCALABILITY_TAU2_WORKLOAD_US 6500ULL
+    #elif SCALABILITY_TASK_COUNT == 3
+      /* Rounded equally, with a one-microsecond hyperperiod adjustment. */
+      #define SCALABILITY_TAU1_WORKLOAD_US 2167ULL
+      #define SCALABILITY_TAU2_WORKLOAD_US 4334ULL
+      #define SCALABILITY_TAU3_WORKLOAD_US 10830ULL
+    #else
+      #define SCALABILITY_TAU1_WORKLOAD_US 1625ULL
+      #define SCALABILITY_TAU2_WORKLOAD_US 3250ULL
+      #define SCALABILITY_TAU3_WORKLOAD_US 8125ULL
+      #define SCALABILITY_TAU4_WORKLOAD_US 16250ULL
+    #endif
+  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
+    #define SCALABILITY_WORKLOAD_SCENARIO_NAME "U90"
+    #define SCALABILITY_WORKLOAD_UTILIZATION_PERCENT 90U
+    #if SCALABILITY_TASK_COUNT == 2
+      #define SCALABILITY_TAU1_WORKLOAD_US 4500ULL
+      #define SCALABILITY_TAU2_WORKLOAD_US 9000ULL
+    #elif SCALABILITY_TASK_COUNT == 3
+      #define SCALABILITY_TAU1_WORKLOAD_US 3000ULL
+      #define SCALABILITY_TAU2_WORKLOAD_US 6000ULL
+      #define SCALABILITY_TAU3_WORKLOAD_US 15000ULL
+    #else
+      #define SCALABILITY_TAU1_WORKLOAD_US 2250ULL
+      #define SCALABILITY_TAU2_WORKLOAD_US 4500ULL
+      #define SCALABILITY_TAU3_WORKLOAD_US 11250ULL
+      #define SCALABILITY_TAU4_WORKLOAD_US 22500ULL
+    #endif
+  #else
+    #error "Superloop scalability profiles support U65 and U90 only"
+  #endif
 #endif
 
 static int HCSR04_Read_cm(void)
@@ -1786,10 +1911,12 @@ static void Print_Profiling_Summary(void)
   /* Print_Exec_Samples(); */
 
   snprintf(msg, sizeof(msg),
-           "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
+           "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
            SCHED_ALGO_NAME,
            WORKLOAD_SCENARIO_NAME,
            (unsigned long)WORKLOAD_UTILIZATION_PERCENT,
+           (unsigned long)PROFILE_WINDOW_US,
+           (unsigned int)INTEGRATED_SYNTH_TASK_COUNT,
            (unsigned long)SCHED_CSV_CHUNK_US,
            (unsigned long)g_sched_count,
            (unsigned long)(sched_overhead_x10000 / 10000),
@@ -2288,6 +2415,355 @@ static void Run_Superloop_Checks_Profile(void)
 }
 #endif
 
+#if (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN) || \
+    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS)
+typedef struct
+{
+  uint64_t period_us;
+  uint64_t workload_us;
+  uint64_t next_release_us;
+  uint64_t task_cycles;
+  uint32_t runs;
+} ScalabilityTask_t;
+
+static uint32_t Scalability_DWT_Measurement_Overhead(void)
+{
+  uint32_t overhead_cycles = UINT32_MAX;
+
+  for (uint32_t i = 0; i < 1000U; i++)
+  {
+    uint32_t start_cycles = DWT->CYCCNT;
+    uint32_t end_cycles = DWT->CYCCNT;
+    uint32_t delta_cycles = end_cycles - start_cycles;
+
+    if (delta_cycles < overhead_cycles)
+    {
+      overhead_cycles = delta_cycles;
+    }
+  }
+
+  return overhead_cycles;
+}
+
+static void Scalability_InitTasks(ScalabilityTask_t *tasks,
+                                  uint64_t profile_start_us)
+{
+  tasks[0] = (ScalabilityTask_t) {
+      SCALABILITY_TAU1_PERIOD_US, SCALABILITY_TAU1_WORKLOAD_US,
+      profile_start_us, 0ULL, 0U};
+  tasks[1] = (ScalabilityTask_t) {
+      SCALABILITY_TAU2_PERIOD_US, SCALABILITY_TAU2_WORKLOAD_US,
+      profile_start_us, 0ULL, 0U};
+
+  #if SCALABILITY_TASK_COUNT >= 3
+  tasks[2] = (ScalabilityTask_t) {
+      SCALABILITY_TAU3_PERIOD_US, SCALABILITY_TAU3_WORKLOAD_US,
+      profile_start_us, 0ULL, 0U};
+  #endif
+
+  #if SCALABILITY_TASK_COUNT >= 4
+  tasks[3] = (ScalabilityTask_t) {
+      SCALABILITY_TAU4_PERIOD_US, SCALABILITY_TAU4_WORKLOAD_US,
+      profile_start_us, 0ULL, 0U};
+  #endif
+}
+
+#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN
+static void Scalability_PrintTask(uint32_t task_index,
+                                  const ScalabilityTask_t *task)
+{
+  uart_print("\r\n\r\ntau");
+  uart_print_u64(task_index + 1U);
+  uart_print(":\r\n  runs: ");
+  uart_print_u64(task->runs);
+  uart_print("\r\n  task_us: ");
+  uart_print_u64(task->task_cycles / g_cycles_per_us);
+}
+#endif
+
+static void Scalability_PrintCsvRuns(const ScalabilityTask_t *tasks)
+{
+  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
+       task_index++)
+  {
+    uart_print(",TAU");
+    uart_print_u64(task_index + 1U);
+    uart_print("_RUNS=");
+    uart_print_u64(tasks[task_index].runs);
+  }
+}
+#endif
+
+#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN
+/* Clean busy-polling scalability profile: task-body DWT only. */
+static void Run_Superloop_Scalability_Clean(void)
+{
+  ScalabilityTask_t tasks[SCALABILITY_TASK_COUNT];
+  uint64_t profile_start_us;
+  uint64_t profile_end_us;
+  uint64_t profile_finish_us;
+  uint64_t profile_elapsed_us;
+  uint64_t task_cycles = 0ULL;
+  uint64_t task_us;
+  uint64_t superloop_us;
+  uint32_t dwt_measurement_overhead_cycles;
+  uint8_t profile_finished = 0U;
+
+  dwt_measurement_overhead_cycles = Scalability_DWT_Measurement_Overhead();
+  profile_start_us = scheduler_now_us();
+  profile_end_us = profile_start_us + SCALABILITY_PROFILE_WINDOW_US;
+  Scalability_InitTasks(tasks, profile_start_us);
+
+  while (profile_finished == 0U)
+  {
+    for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
+         task_index++)
+    {
+      ScalabilityTask_t *task = &tasks[task_index];
+      uint64_t now_us = scheduler_now_us();
+
+      if ((int64_t)(now_us - profile_end_us) >= 0)
+      {
+        profile_finished = 1U;
+        break;
+      }
+
+      if (now_us >= task->next_release_us)
+      {
+        uint32_t task_start_cycles = DWT->CYCCNT;
+        Synthetic_Workload_us(task->workload_us);
+        uint32_t task_end_cycles = DWT->CYCCNT;
+        uint64_t finish_us;
+
+        task->task_cycles += Correct_DWT_Delta(
+            task_end_cycles - task_start_cycles,
+            dwt_measurement_overhead_cycles);
+
+        finish_us = scheduler_now_us();
+        task->next_release_us += task->period_us;
+
+        while ((int64_t)(finish_us - task->next_release_us) > 0)
+        {
+          task->next_release_us += task->period_us;
+        }
+
+        task->runs++;
+      }
+    }
+  }
+
+  profile_finish_us = scheduler_now_us();
+  profile_elapsed_us = profile_finish_us - profile_start_us;
+
+  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
+       task_index++)
+  {
+    task_cycles += tasks[task_index].task_cycles;
+  }
+
+  task_us = task_cycles / g_cycles_per_us;
+  /* Includes polling, end checks, task DWT measurement, and runs++ counters. */
+  superloop_us = profile_elapsed_us > task_us
+                 ? profile_elapsed_us - task_us : 0ULL;
+
+  uart_print("\r\n=== SUPERLOOP SCALABILITY CLEAN ===\r\nscenario: ");
+  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
+  uart_print("\r\ntasks: ");
+  uart_print_u64(SCALABILITY_TASK_COUNT);
+  uart_print("\r\nwindow_us: ");
+  uart_print_u64(profile_elapsed_us);
+
+  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
+       task_index++)
+  {
+    Scalability_PrintTask(task_index, &tasks[task_index]);
+  }
+
+  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
+  uart_print_u64(task_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nsuperloop:\r\n  total_us: ");
+  uart_print_u64(superloop_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
+  uart_print(" %\r\n");
+
+  uart_print("CSV_SUPERLOOP_SCALE_CLEAN,SCENARIO=");
+  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
+  uart_print(",U=");
+  uart_print_u64(SCALABILITY_WORKLOAD_UTILIZATION_PERCENT);
+  uart_print(",TASKS=");
+  uart_print_u64(SCALABILITY_TASK_COUNT);
+  uart_print(",WINDOW_US=");
+  uart_print_u64(profile_elapsed_us);
+  Scalability_PrintCsvRuns(tasks);
+  uart_print(",TASK_US=");
+  uart_print_u64(task_us);
+  uart_print(",TASK_PCT=");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(",SUPERLOOP_US=");
+  uart_print_u64(superloop_us);
+  uart_print(",SUPERLOOP_PCT=");
+  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
+  uart_print("\r\n");
+
+  while (1)
+  {
+  }
+}
+#endif
+
+#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS
+/* Diagnostic scalability profile: readiness and release DWT are intentional. */
+static void Run_Superloop_Scalability_Checks(void)
+{
+  ScalabilityTask_t tasks[SCALABILITY_TASK_COUNT];
+  uint64_t profile_start_us;
+  uint64_t profile_end_us;
+  uint64_t profile_finish_us;
+  uint64_t profile_elapsed_us;
+  uint64_t task_cycles = 0ULL;
+  uint64_t readiness_cycles = 0ULL;
+  uint64_t release_maintenance_cycles = 0ULL;
+  uint64_t check_cycles;
+  uint64_t task_us;
+  uint64_t readiness_us;
+  uint64_t release_us;
+  uint64_t checks_us;
+  uint32_t dwt_measurement_overhead_cycles;
+  uint8_t profile_finished = 0U;
+
+  dwt_measurement_overhead_cycles = Scalability_DWT_Measurement_Overhead();
+  profile_start_us = scheduler_now_us();
+  profile_end_us = profile_start_us + SCALABILITY_PROFILE_WINDOW_US;
+  Scalability_InitTasks(tasks, profile_start_us);
+
+  while (profile_finished == 0U)
+  {
+    for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
+         task_index++)
+    {
+      ScalabilityTask_t *task = &tasks[task_index];
+      uint32_t readiness_start_cycles = DWT->CYCCNT;
+      uint64_t now_us = scheduler_now_us();
+      uint8_t task_ready = (now_us >= task->next_release_us);
+      uint32_t readiness_end_cycles = DWT->CYCCNT;
+
+      readiness_cycles += Correct_DWT_Delta(
+          readiness_end_cycles - readiness_start_cycles,
+          dwt_measurement_overhead_cycles);
+
+      if ((int64_t)(now_us - profile_end_us) >= 0)
+      {
+        profile_finished = 1U;
+        break;
+      }
+
+      if (task_ready != 0U)
+      {
+        uint32_t task_start_cycles = DWT->CYCCNT;
+        Synthetic_Workload_us(task->workload_us);
+        uint32_t task_end_cycles = DWT->CYCCNT;
+        uint32_t release_start_cycles;
+        uint32_t release_end_cycles;
+        uint64_t finish_us;
+
+        task->task_cycles += Correct_DWT_Delta(
+            task_end_cycles - task_start_cycles,
+            dwt_measurement_overhead_cycles);
+
+        release_start_cycles = DWT->CYCCNT;
+        finish_us = scheduler_now_us();
+        task->next_release_us += task->period_us;
+
+        while ((int64_t)(finish_us - task->next_release_us) > 0)
+        {
+          task->next_release_us += task->period_us;
+        }
+
+        release_end_cycles = DWT->CYCCNT;
+        release_maintenance_cycles += Correct_DWT_Delta(
+            release_end_cycles - release_start_cycles,
+            dwt_measurement_overhead_cycles);
+        task->runs++;
+      }
+    }
+  }
+
+  profile_finish_us = scheduler_now_us();
+  profile_elapsed_us = profile_finish_us - profile_start_us;
+
+  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
+       task_index++)
+  {
+    task_cycles += tasks[task_index].task_cycles;
+  }
+
+  check_cycles = readiness_cycles + release_maintenance_cycles;
+  task_us = task_cycles / g_cycles_per_us;
+  readiness_us = readiness_cycles / g_cycles_per_us;
+  release_us = release_maintenance_cycles / g_cycles_per_us;
+  checks_us = check_cycles / g_cycles_per_us;
+
+  uart_print("\r\n=== SUPERLOOP SCALABILITY CHECKS ===\r\nscenario: ");
+  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
+  uart_print("\r\ntasks: ");
+  uart_print_u64(SCALABILITY_TASK_COUNT);
+  uart_print("\r\nwindow_us: ");
+  uart_print_u64(profile_elapsed_us);
+
+  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
+  uart_print_u64(task_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nreadiness:\r\n  total_us: ");
+  uart_print_u64(readiness_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nrelease_maintenance:\r\n  total_us: ");
+  uart_print_u64(release_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(release_us, profile_elapsed_us);
+  uart_print(" %\r\n\r\nmeasured_checks:\r\n  total_us: ");
+  uart_print_u64(checks_us);
+  uart_print("\r\n  percent: ");
+  uart_print_percent_x10000(checks_us, profile_elapsed_us);
+  uart_print(" %\r\n");
+
+  uart_print("CSV_SUPERLOOP_SCALE_CHECKS,SCENARIO=");
+  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
+  uart_print(",U=");
+  uart_print_u64(SCALABILITY_WORKLOAD_UTILIZATION_PERCENT);
+  uart_print(",TASKS=");
+  uart_print_u64(SCALABILITY_TASK_COUNT);
+  uart_print(",WINDOW_US=");
+  uart_print_u64(profile_elapsed_us);
+  Scalability_PrintCsvRuns(tasks);
+  uart_print(",TASK_US=");
+  uart_print_u64(task_us);
+  uart_print(",TASK_PCT=");
+  uart_print_percent_x10000(task_us, profile_elapsed_us);
+  uart_print(",READINESS_US=");
+  uart_print_u64(readiness_us);
+  uart_print(",READINESS_PCT=");
+  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
+  uart_print(",RELEASE_US=");
+  uart_print_u64(release_us);
+  uart_print(",RELEASE_PCT=");
+  uart_print_percent_x10000(release_us, profile_elapsed_us);
+  uart_print(",CHECKS_US=");
+  uart_print_u64(checks_us);
+  uart_print(",CHECKS_PCT=");
+  uart_print_percent_x10000(checks_us, profile_elapsed_us);
+  uart_print("\r\n");
+
+  while (1)
+  {
+  }
+}
+#endif
+
 static void Tasks_Init(void)
 {
   uint64_t now_us = scheduler_now_us();
@@ -2412,6 +2888,10 @@ int main(void)
   Run_Minimal_Superloop_Profile();
   #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE
   Run_Superloop_Checks_Profile();
+  #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN
+  Run_Superloop_Scalability_Clean();
+  #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS
+  Run_Superloop_Scalability_Checks();
   #else
   char msg[128];
 

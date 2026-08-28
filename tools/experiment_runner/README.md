@@ -34,7 +34,35 @@ py tools\experiment_runner\run_matrix.py `
   --programmer "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
 ```
 
-`matrix.default.json` defines 84 runs: `U50`–`U100`, windows of 10/30/60/100/250/500/1000 seconds, and the `clean` and `checks` modes. The measurement windows alone take 390 minutes; allow additional time for 84 builds and flashes.
+`matrix.default.json` defines 84 runs: `U50`-`U100`, windows of 10/30/60/100/250/500/1000 seconds, and the `clean` and `checks` modes. The measurement windows alone take 390 minutes; allow additional time for 84 builds and flashes.
+
+### Separate scalability run
+
+`matrix.scalability.json` is deliberately separate from the default matrix. It runs exactly 12 measurements: task counts 2/3/4, scenarios `U65` and `U90`, 60-second windows, and `scale_clean`/`scale_checks` modes. It does not repeat or modify the 84-run campaign.
+
+```powershell
+py tools\experiment_runner\run_matrix.py `
+  --port COM5 `
+  --headless-builder "C:\path\headless-build.bat" `
+  --programmer "C:\path\STM32_Programmer_CLI.exe" `
+  --matrix tools\experiment_runner\matrix.scalability.json
+```
+
+The measurement windows take 12 minutes in total; allow a few extra minutes for builds and flashes. Run it without `--output-dir` to create a new results directory and a separate `summary.csv`.
+
+### Separate integrated-statistics run
+
+`matrix.integrated_stats.json` is another independent campaign for the original full-statistics integrated Superloop profile. It runs `U50`, `U75`, `U90`, and `U100`; 2 and 3 synthetic tasks; and 30/60/100-second windows: 24 measurements in total.
+
+```powershell
+py tools\experiment_runner\run_matrix.py `
+  --port COM5 `
+  --headless-builder "C:\path\headless-build.bat" `
+  --programmer "C:\path\STM32_Programmer_CLI.exe" `
+  --matrix tools\experiment_runner\matrix.integrated_stats.json
+```
+
+The measurement windows take 25.3 minutes in total. In addition to `summary.csv`, this campaign writes `task_summary.csv` with the complete per-task execution, response-time, deadline, and skipped-release CSV rows. The 2-task configuration uses IMU and LiDAR, with their 3:4 relative workload split re-normalized to the selected total utilization.
 
 For a safe check without touching the board:
 
@@ -46,10 +74,11 @@ py tools\experiment_runner\run_matrix.py --port COM5 --headless-builder C:\path\
 
 Every campaign creates its own `results/<UTC timestamp>/` directory:
 
-- `summary.csv` — one table with requested and reported parameters for all runs;
-- `raw/*.log` — the complete UART log of each run;
-- `build/*.log` and `build/*.flash.log` — build and flashing logs;
-- `matrix.json` — the exact matrix used for the campaign.
+- `summary.csv` - one table with requested and reported parameters for all runs;
+- `task_summary.csv` - all `CSV_TASK` rows from integrated-statistics runs;
+- `raw/*.log` - the complete UART log of each run;
+- `build/*.log` and `build/*.flash.log` - build and flashing logs;
+- `matrix.json` - the exact matrix used for the campaign.
 
 The temporary STM32CubeIDE headless workspace is created outside the repository and is not placed in the results directory.
 
@@ -57,7 +86,7 @@ All result files are ignored by Git. A failed run is still written to `summary.c
 
 ## Changing the matrix
 
-Copy `matrix.default.json`, keep the required scenarios, windows, and modes, then pass it with `--matrix`. For example, a short test of one mode:
+Copy `matrix.default.json`, keep the required scenarios, windows, and modes, then pass it with `--matrix`. For `scale_clean` or `scale_checks`, also provide `task_counts` containing only `2`, `3`, and/or `4`. For example, a short test of one mode:
 
 ```json
 {

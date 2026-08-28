@@ -65,7 +65,7 @@ After the window, the terminal prints `=== CLEAN SUPERLOOP PROFILE ===` and a `C
 
 To run many scenarios and windows without manually changing macros or using PuTTY, use [`tools/experiment_runner/`](tools/experiment_runner/). The Python script builds and flashes each configuration, reads the ST-LINK Virtual COM Port, saves a separate UART log, and combines CSV rows in `results/<timestamp>/summary.csv`.
 
-The supplied matrix contains `U50`–`U100`, windows of 10/30/60/100/250/500/1000 seconds, and Clean/Checks modes: 84 runs in total. See the [automation guide](tools/experiment_runner/README.md) for setup and the command to run it. Results are ignored by Git; the temporary CubeIDE headless workspace is created outside the repository.
+The supplied matrix contains `U50`-`U100`, windows of 10/30/60/100/250/500/1000 seconds, and Clean/Checks modes: 84 runs in total. Separate matrices cover Superloop scalability (12 runs) and full-statistics integrated Superloop profiling (24 runs), without repeating the default campaign. See the [automation guide](tools/experiment_runner/README.md) for setup and commands. Results are ignored by Git; the temporary CubeIDE headless workspace is created outside the repository.
 
 ## Configuring an experiment
 
@@ -75,10 +75,13 @@ Edit [`Core/Inc/experiment_config.h`](Core/Inc/experiment_config.h) for the prim
 
 | Macro | What it controls |
 | --- | --- |
-| `WORKLOAD_SCENARIO` | Workload scenario `U50`–`U110`. |
+| `WORKLOAD_SCENARIO` | Workload scenario `U50`-`U110`. |
 | `SCHED_ALGO` | Scheduler of the integrated experiment: Superloop, EDF, or Chunked EDF. It is not used by modes 3 and 4. |
 | `EXPERIMENT_MODE` | Run type and collected statistics. |
+| `INTEGRATED_SYNTH_TASK_COUNT` | Synthetic task count in the integrated mode: `2` (IMU + LiDAR) or `3` (IMU + LiDAR + Camera). |
 | `MINIMAL_PROFILE_WINDOW_US` | Window for modes 3 and 4; `60000000ULL` (60 seconds) by default. |
+| `SCALABILITY_PROFILE_WINDOW_US` | Window for scalability modes 5 and 6; `60000000ULL` (60 seconds) by default. |
+| `SCALABILITY_TASK_COUNT` | Active synthetic task count in modes 5 and 6: only `2`, `3`, or `4`. |
 | `PROFILE_WINDOW_US` | Window for integrated profiling; `10000000ULL` (10 seconds) by default. |
 | `EDF_CHUNK_US` | Synthetic-work chunk size in Chunked EDF. |
 | `SCHEDULER_MODE` (`main.c`) | Idle policy of the integrated scheduler: busy polling or WFI. Modes 3 and 4 always use busy polling. |
@@ -95,13 +98,16 @@ All time values are microseconds and use the `ULL` suffix. Rebuild and reflash a
 | --- | --- |
 | `WORKLOAD_SCENARIO_U50` | 50% |
 | `WORKLOAD_SCENARIO_U65` | 65% |
+| `WORKLOAD_SCENARIO_U75` | 75% |
 | `WORKLOAD_SCENARIO_U80` | 80% |
 | `WORKLOAD_SCENARIO_U90` | 90% |
 | `WORKLOAD_SCENARIO_U95` | 95% |
 | `WORKLOAD_SCENARIO_U100` | 100% |
 | `WORKLOAD_SCENARIO_U110` | 110%, overloaded |
 
-Only `U50`–`U100` are available in Superloop profile modes 3 and 4. `U110` is supported by the other modes.
+Only `U50`-`U100` are available in Superloop profile modes 3 and 4. `U110` is supported by the other modes.
+
+Scalability modes 5 and 6 accept only `U65` and `U90`; they use 2, 3, or 4 tasks with periods of 10, 20, 50, and 100 ms respectively.
 
 ### Scheduling algorithms
 
@@ -120,8 +126,12 @@ Only `U50`–`U100` are available in Superloop profile modes 3 and 4. `U110` is 
 | `EXPERIMENT_ISOLATED_TAU2` (`2`) | Isolated execution of the second task. |
 | `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` (`3`) | Clean two-task busy-polling Superloop. `SUPERLOOP_PCT` is the part of the window outside synthetic task bodies. |
 | `EXPERIMENT_SUPERLOOP_CHECKS_PROFILE` (`4`) | DWT-instrumented profile of readiness checks and release maintenance. |
+| `EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN` (`5`) | Clean busy-polling Superloop scalability profile with 2, 3, or 4 synthetic tasks. |
+| `EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS` (`6`) | Diagnostic scalability profile of readiness checks and release maintenance. |
 
 In modes 3 and 4, `SCHED_ALGO` is not used: they run their own two-task busy-polling Superloop. `SCHED_ALGO` affects `EXPERIMENT_INTEGRATED` only.
+
+Modes 5 and 6 also use their own fixed-order busy-polling Superloop and do not use `SCHED_ALGO`.
 
 The modes answer different questions and should not be mixed during interpretation:
 

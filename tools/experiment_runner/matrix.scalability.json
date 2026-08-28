@@ -1,0 +1,13 @@
+{
+  "scenarios": ["U65", "U90"],
+  "windows_us": [60000000],
+  "modes": ["scale_clean", "scale_checks"],
+  "task_counts": [2, 3, 4],
+  "repeats": 1,
+  "scheduler_algorithm": "SCHED_ALGO_SUPERLOOP",
+  "integrated_window_us": 10000000,
+  "edf_chunk_us": 1000,
+  "build_configuration": "Debug",
+  "stlink_frequency_khz": 4000,
+  "uart_timeout_grace_s": 45
+}
