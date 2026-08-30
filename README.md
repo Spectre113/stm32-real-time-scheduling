@@ -117,7 +117,31 @@ Scalability modes 5 and 6 accept only `U65` and `U90`; they use 2, 3, or 4 tasks
 | --- | --- |
 | `SCHED_ALGO_SUPERLOOP` | Fixed non-preemptive order of ready tasks. |
 | `SCHED_ALGO_EDF` | Non-preemptive EDF: selects the ready task with the nearest absolute deadline and runs it to completion. |
-| `SCHED_ALGO_CHUNKED_EDF` | EDF with synthetic work split into `EDF_CHUNK_US` chunks; the scheduler chooses again after each chunk. This is cooperative scheduling, not hardware preemption or interrupt-driven context switching. |
+| `SCHED_ALGO_CHUNKED_EDF` | EDF with synthetic work split into `EDF_CHUNK_US` chunks; the scheduler chooses again after each chunk. HC-SR04 uses a separate staged EXTI path rather than fake synthetic chunks. This is cooperative scheduling, not hardware preemption or interrupt-driven context switching. |
+
+### HC-SR04 with Chunked EDF
+
+When `ENABLE_REAL_TAU1` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, HC-SR04 uses a staged transaction: the short trigger pulse runs synchronously, while ECHO rise/fall are captured by EXTI0 on PC0. The active job is not runnable while the sensor waits, so the scheduler can run other ready work. Its execution statistic contains only trigger/finalization CPU time; ECHO wait time contributes only to response time. Superloop and ordinary EDF retain the original blocking HC-SR04 baseline.
+
+DHT11 remains unsupported by Chunked EDF and intentionally produces a compile-time error when `ENABLE_REAL_TAU2` is `1`.
+
+For a 10-second HC-SR04-only smoke test, edit the block at the top of `Core/Src/main.c` to:
+
+```c
+#define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
+#define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+#define PROFILE_WINDOW_US 10000000ULL
+
+#define ENABLE_REAL_TAU1 1
+#define ENABLE_REAL_TAU2 0
+#define ENABLE_SYNTH_IMU 0
+#define ENABLE_SYNTH_LIDAR 0
+#define ENABLE_SYNTH_CONTROL 0
+#define INTEGRATED_SYNTH_TASK_COUNT 2
+#define ENABLE_DEBUG_PRINT 1
+```
+
+`PC0` is configured as GPIO EXTI0 on both edges and EXTI0 IRQ priority 5. If CubeMX regenerates the project, retain PC0 as `GPIO_EXTI0`, rising/falling edge trigger with pulldown, and keep the generated `EXTI0_IRQHandler()` calling `HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0)`.
 
 ### Experiment modes
 

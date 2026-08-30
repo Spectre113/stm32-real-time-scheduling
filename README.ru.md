@@ -117,7 +117,31 @@ Scalability-режимы 5 и 6 поддерживают только `U65` и `
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `SCHED_ALGO_SUPERLOOP`   | Фиксированный невытесняющий порядок готовых задач.                                                                                                                                                           |
 | `SCHED_ALGO_EDF`         | Невытесняющий EDF: выбирается готовая задача с ближайшим абсолютным дедлайном и выполняется до завершения.                                                                                                   |
-| `SCHED_ALGO_CHUNKED_EDF` | EDF с кооперативным разбиением синтетической работы на части `EDF_CHUNK_US`; после каждого chunk планировщик повторно выбирает задачу. Это не аппаратное вытеснение и не переключение контекста прерыванием. |
+| `SCHED_ALGO_CHUNKED_EDF` | EDF с кооперативным разбиением синтетической работы на части `EDF_CHUNK_US`; после каждого chunk планировщик повторно выбирает задачу. Для HC-SR04 используется отдельный staged EXTI-путь, а не фиктивные синтетические chunks. Это не аппаратное вытеснение и не переключение контекста прерыванием. |
+
+### HC-SR04 в Chunked EDF
+
+Когда `ENABLE_REAL_TAU1` равен `1`, а `SCHED_ALGO` - `SCHED_ALGO_CHUNKED_EDF`, для HC-SR04 используется staged-транзакция: короткий trigger pulse выполняется синхронно, а фронты ECHO RISE/FALL захватываются через EXTI0 на PC0. Пока датчик ожидает ECHO, job остаётся active, но не runnable, поэтому планировщик может выполнять другую готовую работу. В execution-статистику попадает только CPU-время trigger/finalization, а ожидание ECHO входит только в response time. Superloop и обычный EDF сохраняют прежний blocking baseline HC-SR04.
+
+DHT11 пока не поддерживается Chunked EDF: при `ENABLE_REAL_TAU2 = 1` намеренно возникает compile-time error.
+
+Для 10-секундного smoke-теста только HC-SR04 измените блок в начале `Core/Src/main.c` так:
+
+```c
+#define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
+#define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+#define PROFILE_WINDOW_US 10000000ULL
+
+#define ENABLE_REAL_TAU1 1
+#define ENABLE_REAL_TAU2 0
+#define ENABLE_SYNTH_IMU 0
+#define ENABLE_SYNTH_LIDAR 0
+#define ENABLE_SYNTH_CONTROL 0
+#define INTEGRATED_SYNTH_TASK_COUNT 2
+#define ENABLE_DEBUG_PRINT 1
+```
+
+PC0 настроен как GPIO EXTI0 на оба фронта, приоритет EXTI0 IRQ - 5. Если проект регенерируется в CubeMX, сохраните для PC0 `GPIO_EXTI0`, триггер RISE/FALL с pulldown и сгенерированный `EXTI0_IRQHandler()`, вызывающий `HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0)`.
 
 ### Режимы экспериментов
 

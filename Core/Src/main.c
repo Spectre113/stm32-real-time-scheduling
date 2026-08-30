@@ -389,13 +389,31 @@ typedef struct
 
 typedef void (*TaskRunFn)(void);
 
+typedef enum
+{
+  SCHED_TASK_SYNTHETIC = 0,
+  SCHED_TASK_STAGED_HCSR04,
+  SCHED_TASK_BLOCKING_REAL
+} SchedTaskKind_t;
+
 typedef struct
 {
   Task_t *task;
   TaskRunFn run;
   uint64_t workload_us;
   uint8_t enabled;
+  SchedTaskKind_t kind;
 } SchedTaskRef_t;
+
+typedef enum
+{
+  HCSR04_IDLE = 0,
+  HCSR04_TRIGGER,
+  HCSR04_WAIT_ECHO_RISE,
+  HCSR04_WAIT_ECHO_FALL,
+  HCSR04_COMPLETE,
+  HCSR04_ERROR
+} HCSR04_State_t;
 
 /* USER CODE END PTD */
 
@@ -465,6 +483,18 @@ static uint8_t g_hum = 0;
 static int g_dht_res = -99;
 
 static uint32_t g_cycles_per_us = 1;
+
+#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+/* ISR-shared HC-SR04 event data. 32-bit DWT cycle values are atomically read. */
+static volatile HCSR04_State_t g_hcsr04_state = HCSR04_IDLE;
+static volatile uint8_t g_hcsr04_rise_event = 0U;
+static volatile uint8_t g_hcsr04_fall_event = 0U;
+static volatile uint32_t g_hcsr04_echo_rise_cycles = 0U;
+static volatile uint32_t g_hcsr04_echo_fall_cycles = 0U;
+static volatile uint32_t g_hcsr04_timeout_cycles = 0U;
+static volatile uint32_t g_hcsr04_rise_timeout_cycles = 0U;
+static volatile uint8_t g_hcsr04_rise_late = 0U;
+#endif
 
 static uint64_t g_profile_start_us = 0;
 static uint32_t g_profile_start_ms = 0;
@@ -683,7 +713,8 @@ static inline uint32_t Correct_DWT_Delta(uint32_t delta,
   #endif
 #endif
 
-static int HCSR04_Read_cm(void)
+/* Blocking baseline retained for Superloop and ordinary EDF. */
+static int HCSR04_Read_cm_Blocking(void)
 {
 	uint64_t start_time;
 	uint64_t echo_start;
@@ -723,6 +754,183 @@ static int HCSR04_Read_cm(void)
 
   return duration_us / 58;
 }
+
+#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+static void HCSR04_Async_Reset(void)
+{
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  g_hcsr04_state = HCSR04_IDLE;
+  g_hcsr04_rise_event = 0U;
+  g_hcsr04_fall_event = 0U;
+  __set_PRIMASK(primask);
+
+  g_hcsr04_timeout_cycles = 0U;
+  g_hcsr04_rise_timeout_cycles = 0U;
+  g_hcsr04_rise_late = 0U;
+}
+
+/* The short 2 us + 10 us trigger pulse is the only synchronous sensor stage. */
+static void HCSR04_Async_Start(void)
+{
+  uint32_t primask;
+
+  g_hcsr04_state = HCSR04_TRIGGER;
+  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_RESET);
+  delay_us(2);
+
+  /* Arm EXTI before the rising trigger edge so a short echo pulse is not lost. */
+  primask = __get_PRIMASK();
+  __disable_irq();
+  g_hcsr04_rise_event = 0U;
+  g_hcsr04_fall_event = 0U;
+  g_hcsr04_rise_late = 0U;
+  g_hcsr04_rise_timeout_cycles = DWT->CYCCNT +
+      ((uint32_t)HCSR04_TIMEOUT_US * g_cycles_per_us);
+  g_hcsr04_timeout_cycles = g_hcsr04_rise_timeout_cycles;
+  g_hcsr04_state = HCSR04_WAIT_ECHO_RISE;
+  __set_PRIMASK(primask);
+
+  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_SET);
+  delay_us(10);
+  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_RESET);
+}
+
+static uint8_t HCSR04_Async_IsRunnable(uint64_t now_us)
+{
+  HCSR04_State_t state = g_hcsr04_state;
+  uint32_t current_cycles;
+
+  (void)now_us;
+
+  if ((state == HCSR04_COMPLETE) && (g_hcsr04_fall_event != 0U))
+  {
+    return 1U;
+  }
+
+  if ((state == HCSR04_WAIT_ECHO_RISE) ||
+      (state == HCSR04_WAIT_ECHO_FALL))
+  {
+    current_cycles = DWT->CYCCNT;
+    return ((int32_t)(current_cycles - g_hcsr04_timeout_cycles) >= 0);
+  }
+
+  return 0U;
+}
+
+static uint8_t HCSR04_Async_Finalize(int *distance_cm)
+{
+  uint32_t primask = __get_PRIMASK();
+  uint32_t rise_cycles;
+  uint32_t fall_cycles;
+  uint32_t duration_cycles;
+  uint8_t rise_late;
+
+  __disable_irq();
+  if ((g_hcsr04_state != HCSR04_COMPLETE) ||
+      (g_hcsr04_fall_event == 0U))
+  {
+    __set_PRIMASK(primask);
+    return 0U;
+  }
+
+  rise_cycles = g_hcsr04_echo_rise_cycles;
+  fall_cycles = g_hcsr04_echo_fall_cycles;
+  rise_late = g_hcsr04_rise_late;
+  g_hcsr04_state = HCSR04_IDLE;
+  g_hcsr04_rise_event = 0U;
+  g_hcsr04_fall_event = 0U;
+  g_hcsr04_rise_late = 0U;
+  __set_PRIMASK(primask);
+
+  /* Unsigned DWT subtraction is wrap-safe for an HC-SR04 echo pulse. */
+  duration_cycles = fall_cycles - rise_cycles;
+  *distance_cm = (rise_late != 0U)
+      ? -1 : (int)((duration_cycles / g_cycles_per_us) / 58U);
+  g_hcsr04_timeout_cycles = 0U;
+  g_hcsr04_rise_timeout_cycles = 0U;
+
+  return 1U;
+}
+
+static uint8_t HCSR04_Async_Timeout(int *distance_cm)
+{
+  uint32_t primask = __get_PRIMASK();
+  uint32_t current_cycles;
+  HCSR04_State_t state;
+  int sensor_error;
+
+  __disable_irq();
+  state = g_hcsr04_state;
+
+  if (((state != HCSR04_WAIT_ECHO_RISE) &&
+       (state != HCSR04_WAIT_ECHO_FALL)))
+  {
+    __set_PRIMASK(primask);
+    return 0U;
+  }
+
+  current_cycles = DWT->CYCCNT;
+  if ((int32_t)(current_cycles - g_hcsr04_timeout_cycles) < 0)
+  {
+    __set_PRIMASK(primask);
+    return 0U;
+  }
+
+  sensor_error = (state == HCSR04_WAIT_ECHO_RISE) ? -1 : -2;
+  if (g_hcsr04_rise_late != 0U)
+  {
+    sensor_error = -1;
+  }
+
+  *distance_cm = sensor_error;
+  g_hcsr04_state = HCSR04_ERROR;
+  g_hcsr04_rise_event = 0U;
+  g_hcsr04_fall_event = 0U;
+  g_hcsr04_rise_late = 0U;
+  g_hcsr04_state = HCSR04_IDLE;
+  __set_PRIMASK(primask);
+
+  g_hcsr04_timeout_cycles = 0U;
+  g_hcsr04_rise_timeout_cycles = 0U;
+  return 1U;
+}
+
+/* EXTI ISR callback: capture only the edge and state/event flags. */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  HCSR04_State_t state;
+  uint32_t cycles;
+  GPIO_PinState level;
+
+  if (GPIO_Pin != HCSR04_ECHO_PIN)
+  {
+    return;
+  }
+
+  cycles = DWT->CYCCNT;
+  level = HAL_GPIO_ReadPin(HCSR04_ECHO_PORT, HCSR04_ECHO_PIN);
+  state = g_hcsr04_state;
+
+  if ((state == HCSR04_WAIT_ECHO_RISE) && (level == GPIO_PIN_SET))
+  {
+    g_hcsr04_echo_rise_cycles = cycles;
+    g_hcsr04_rise_event = 1U;
+    g_hcsr04_rise_late =
+        ((int32_t)(cycles - g_hcsr04_rise_timeout_cycles) > 0) ? 1U : 0U;
+    g_hcsr04_timeout_cycles = cycles +
+        ((uint32_t)HCSR04_TIMEOUT_US * g_cycles_per_us);
+    g_hcsr04_state = HCSR04_WAIT_ECHO_FALL;
+  }
+  else if ((state == HCSR04_WAIT_ECHO_FALL) && (level == GPIO_PIN_RESET))
+  {
+    g_hcsr04_echo_fall_cycles = cycles;
+    g_hcsr04_fall_event = 1U;
+    g_hcsr04_state = HCSR04_COMPLETE;
+  }
+}
+#endif
 
 static void DHT11_SetOutput(void)
 {
@@ -826,7 +1034,7 @@ static int DHT11_Read(uint8_t *temp, uint8_t *hum)
 
 static void Tau1_Run(void)
 {
-  g_distance_cm = HCSR04_Read_cm();
+  g_distance_cm = HCSR04_Read_cm_Blocking();
   tau1.run_count++;
 }
 
@@ -869,8 +1077,8 @@ static void Tau_Control_Run(void)
 #endif
 
 #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
-#if ENABLE_REAL_TAU1 || ENABLE_REAL_TAU2
-#error "Chunked EDF supports synthetic tasks only"
+#if ENABLE_REAL_TAU2
+#error "DHT11 is not yet supported by Chunked EDF"
 #endif
 #endif
 
@@ -883,27 +1091,31 @@ static void Tau_Control_Run(void)
 static SchedTaskRef_t g_sched_tasks[] =
 {
   #if ENABLE_SYNTH_CONTROL
-    { &tau_control, Tau_Control_Run, TAU_CONTROL_WORKLOAD_US, 1U },
+    { &tau_control, Tau_Control_Run, TAU_CONTROL_WORKLOAD_US, 1U,
+      SCHED_TASK_SYNTHETIC },
   #endif
 
   #if ENABLE_REAL_TAU1
-    { &tau1, Tau1_Run, 0ULL, 1U },
+    { &tau1, Tau1_Run, 0ULL, 1U, SCHED_TASK_STAGED_HCSR04 },
   #endif
 
   #if ENABLE_SYNTH_LIDAR
-    { &tau_lidar, Tau_LiDAR_Run, TAU_LIDAR_WORKLOAD_US, 1U },
+    { &tau_lidar, Tau_LiDAR_Run, TAU_LIDAR_WORKLOAD_US, 1U,
+      SCHED_TASK_SYNTHETIC },
   #endif
 
   #if ENABLE_SYNTH_IMU
-    { &tau_imu, Tau_IMU_Run, TAU_IMU_WORKLOAD_US, 1U },
+    { &tau_imu, Tau_IMU_Run, TAU_IMU_WORKLOAD_US, 1U,
+      SCHED_TASK_SYNTHETIC },
   #endif
 
   #if ENABLE_SYNTH_CAMERA
-    { &tau_camera, Tau_Camera_Run, TAU_CAMERA_WORKLOAD_US, 1U },
+    { &tau_camera, Tau_Camera_Run, TAU_CAMERA_WORKLOAD_US, 1U,
+      SCHED_TASK_SYNTHETIC },
   #endif
 
   #if ENABLE_REAL_TAU2
-    { &tau2, Tau2_Run, 0ULL, 1U },
+    { &tau2, Tau2_Run, 0ULL, 1U, SCHED_TASK_BLOCKING_REAL },
   #endif
 };
 
@@ -1180,10 +1392,22 @@ static uint64_t Scheduler_TaskAbsoluteDeadline(Task_t *task)
   return release_us + task->deadline_us;
 }
 
-static uint8_t Scheduler_TaskReady(Task_t *task, uint64_t now_us)
+static uint8_t Scheduler_TaskReady(const SchedTaskRef_t *task_ref,
+                                   uint64_t now_us)
 {
+  Task_t *task = task_ref->task;
+
   if (task->job_active)
   {
+    if (task_ref->kind == SCHED_TASK_STAGED_HCSR04)
+    {
+      #if ENABLE_REAL_TAU1
+      return HCSR04_Async_IsRunnable(now_us);
+      #else
+      return 0U;
+      #endif
+    }
+
     return 1U;
   }
 
@@ -1201,12 +1425,18 @@ static SchedTaskRef_t *Scheduler_SelectChunkedEDF(SchedTaskRef_t *tasks,
   {
     Task_t *task = tasks[i].task;
 
-    if (!tasks[i].enabled || task == NULL || tasks[i].workload_us == 0ULL)
+    if (!tasks[i].enabled || task == NULL)
     {
       continue;
     }
 
-    if (!Scheduler_TaskReady(task, now_us))
+    if ((tasks[i].kind == SCHED_TASK_SYNTHETIC) &&
+        (tasks[i].workload_us == 0ULL))
+    {
+      continue;
+    }
+
+    if (!Scheduler_TaskReady(&tasks[i], now_us))
     {
       continue;
     }
@@ -1223,9 +1453,76 @@ static SchedTaskRef_t *Scheduler_SelectChunkedEDF(SchedTaskRef_t *tasks,
   return selected;
 }
 
+static void Scheduler_CompleteChunkedTask(Task_t *task)
+{
+  uint64_t finish_us = scheduler_now_us();
+  uint64_t response_time = finish_us - task->active_release_us;
+
+  task->run_count++;
+
+  Task_UpdateExecStats(task, task->accumulated_exec_us);
+  Task_UpdateResponseStats(task, response_time);
+  Task_CheckDeadline(task, response_time);
+  Task_AdvanceRelease(task, finish_us);
+
+  task->job_active = 0U;
+  task->active_release_us = 0ULL;
+  task->remaining_exec_us = 0ULL;
+  task->accumulated_exec_us = 0ULL;
+}
+
+#if ENABLE_REAL_TAU1
+static void Scheduler_RunChunkedHCSR04(Task_t *task)
+{
+  uint64_t exec_start = micros();
+  uint64_t exec_finish;
+  uint8_t job_complete = 0U;
+  int distance_cm;
+
+  if (!task->job_active)
+  {
+    task->active_release_us = task->next_release_us;
+    task->remaining_exec_us = 0ULL;
+    task->accumulated_exec_us = 0ULL;
+    task->job_active = 1U;
+
+    HCSR04_Async_Start();
+  }
+  else if (HCSR04_Async_Finalize(&distance_cm) != 0U)
+  {
+    g_distance_cm = distance_cm;
+    job_complete = 1U;
+  }
+  else
+  {
+    if (HCSR04_Async_Timeout(&distance_cm) != 0U)
+    {
+      g_distance_cm = distance_cm;
+      job_complete = 1U;
+    }
+  }
+
+  exec_finish = micros();
+  task->accumulated_exec_us += exec_finish - exec_start;
+
+  if (job_complete != 0U)
+  {
+    Scheduler_CompleteChunkedTask(task);
+  }
+}
+#endif
+
 static void Scheduler_RunChunkedTask(SchedTaskRef_t *selected)
 {
   Task_t *task = selected->task;
+
+  if (selected->kind == SCHED_TASK_STAGED_HCSR04)
+  {
+    #if ENABLE_REAL_TAU1
+    Scheduler_RunChunkedHCSR04(task);
+    #endif
+    return;
+  }
 
   if (!task->job_active)
   {
@@ -1254,20 +1551,7 @@ static void Scheduler_RunChunkedTask(SchedTaskRef_t *selected)
 
   if (task->remaining_exec_us == 0ULL)
   {
-    uint64_t finish_us = scheduler_now_us();
-    uint64_t response_time = finish_us - task->active_release_us;
-
-    task->run_count++;
-
-    Task_UpdateExecStats(task, task->accumulated_exec_us);
-    Task_UpdateResponseStats(task, response_time);
-    Task_CheckDeadline(task, response_time);
-    Task_AdvanceRelease(task, finish_us);
-
-    task->job_active = 0;
-    task->active_release_us = 0;
-    task->remaining_exec_us = 0;
-    task->accumulated_exec_us = 0;
+    Scheduler_CompleteChunkedTask(task);
   }
 }
 #endif
@@ -1340,6 +1624,10 @@ static void Reset_Profiling_Stats(void)
 {
   Task_ResetStats(&tau1);
   Task_ResetStats(&tau2);
+
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+    HCSR04_Async_Reset();
+  #endif
 
 	#if ENABLE_SYNTH_IMU
 	  Task_ResetStats(&tau_imu);
@@ -2850,6 +3138,10 @@ static void Tasks_Init(void)
 	  tau1.deadline_ms = tau1.period_ms;
 	  tau1.next_release_ms = (uint32_t)(tau1.next_release_us / 1000ULL);
 	  Task_ResetStats(&tau1);
+
+    #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
+      HCSR04_Async_Reset();
+    #endif
 	#endif
 
 	#if ENABLE_REAL_TAU2
@@ -2968,13 +3260,16 @@ int main(void)
   #else
   char msg[128];
 
-  uart_print("\r\nSynthetic-only scheduler demo started\r\n");
-  uart_print("Tasks: IMU + LiDAR + Camera\r\n");
+  uart_print("\r\nScheduler demo started\r\n");
   snprintf(msg, sizeof(msg),
            "Workload scenario: %s\r\n",
            WORKLOAD_SCENARIO_NAME);
   uart_print(msg);
-  uart_print("Real sensors disabled: HC-SR04 and DHT11 are not used in scheduler\r\n");
+  #if ENABLE_REAL_TAU1 || ENABLE_REAL_TAU2
+    uart_print("Real sensor tasks are enabled\r\n");
+  #else
+    uart_print("Real sensor tasks are disabled\r\n");
+  #endif
 
   HAL_Delay(500);
 
@@ -3679,9 +3974,19 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PC0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  #else
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  #endif
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+  /* HC-SR04 ECHO is captured by EXTI0; ISR only records edge events. */
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+  #endif
 
   /*Configure GPIO pin : PA5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
