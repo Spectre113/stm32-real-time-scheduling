@@ -393,7 +393,7 @@ typedef enum
 {
   SCHED_TASK_SYNTHETIC = 0,
   SCHED_TASK_STAGED_HCSR04,
-  SCHED_TASK_BLOCKING_REAL
+  SCHED_TASK_STAGED_DHT11
 } SchedTaskKind_t;
 
 typedef struct
@@ -414,6 +414,30 @@ typedef enum
   HCSR04_COMPLETE,
   HCSR04_ERROR
 } HCSR04_State_t;
+
+typedef enum
+{
+  DHT11_IDLE = 0,
+  DHT11_START_LOW,
+  DHT11_WAIT_START_LOW,
+  DHT11_READ_TRANSACTION,
+  DHT11_DONE,
+  DHT11_ERROR
+} DHT11_State_t;
+
+typedef enum
+{
+  DHT11_STEP_WAITING = 0,
+  DHT11_STEP_COMPLETE,
+  DHT11_STEP_ERROR
+} DHT11_StepResult_t;
+
+typedef struct
+{
+  DHT11_State_t state;
+  uint64_t wait_until_us;
+  int result;
+} DHT11_Context_t;
 
 /* USER CODE END PTD */
 
@@ -494,6 +518,10 @@ static volatile uint32_t g_hcsr04_echo_fall_cycles = 0U;
 static volatile uint32_t g_hcsr04_timeout_cycles = 0U;
 static volatile uint32_t g_hcsr04_rise_timeout_cycles = 0U;
 static volatile uint8_t g_hcsr04_rise_late = 0U;
+#endif
+
+#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU2
+static DHT11_Context_t g_dht11_ctx;
 #endif
 
 static uint64_t g_profile_start_us = 0;
@@ -963,16 +991,13 @@ static void PA5_TestInputPullup(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
-static int DHT11_Read(uint8_t *temp, uint8_t *hum)
+/* Timing-critical response and 40-bit transfer shared by both DHT11 paths. */
+static int DHT11_ReadTransaction(uint8_t *temp, uint8_t *hum)
 {
   uint8_t data[5] = {0};
   uint64_t t;
 
-  // 1. START сигнал
-  DHT11_SetOutput();
-  HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, GPIO_PIN_RESET);
-  HAL_Delay(30);
-
+  /* The required start-low interval has already elapsed. */
   DHT11_SetInput();
   delay_us(40);
 
@@ -1032,6 +1057,74 @@ static int DHT11_Read(uint8_t *temp, uint8_t *hum)
   return 0;
 }
 
+/* Blocking baseline retained for Superloop and ordinary EDF. */
+static int DHT11_Read(uint8_t *temp, uint8_t *hum)
+{
+  DHT11_SetOutput();
+  HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, GPIO_PIN_RESET);
+  HAL_Delay(30);
+
+  return DHT11_ReadTransaction(temp, hum);
+}
+
+#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU2
+static void DHT11_Async_Reset(void)
+{
+  g_dht11_ctx.state = DHT11_IDLE;
+  g_dht11_ctx.wait_until_us = 0ULL;
+  g_dht11_ctx.result = -99;
+
+  /* Do not leave PA5 actively driving the bus after a profiling reset. */
+  DHT11_SetInput();
+}
+
+static uint8_t DHT11_Async_IsRunnable(uint64_t now_us)
+{
+  if (g_dht11_ctx.state == DHT11_WAIT_START_LOW)
+  {
+    return ((int64_t)(now_us - g_dht11_ctx.wait_until_us) >= 0);
+  }
+
+  return (g_dht11_ctx.state == DHT11_IDLE) ||
+         (g_dht11_ctx.state == DHT11_READ_TRANSACTION);
+}
+
+static DHT11_StepResult_t DHT11_Async_Step(uint64_t now_us)
+{
+  switch (g_dht11_ctx.state)
+  {
+    case DHT11_IDLE:
+      g_dht11_ctx.state = DHT11_START_LOW;
+      DHT11_SetOutput();
+      HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, GPIO_PIN_RESET);
+      g_dht11_ctx.wait_until_us = now_us + 30000ULL;
+      g_dht11_ctx.state = DHT11_WAIT_START_LOW;
+      return DHT11_STEP_WAITING;
+
+    case DHT11_WAIT_START_LOW:
+      if ((int64_t)(now_us - g_dht11_ctx.wait_until_us) < 0)
+      {
+        return DHT11_STEP_WAITING;
+      }
+
+      g_dht11_ctx.state = DHT11_READ_TRANSACTION;
+      /* Fall through: the remaining bitstream must run atomically. */
+
+    case DHT11_READ_TRANSACTION:
+      g_dht11_ctx.result = DHT11_ReadTransaction(&g_temp, &g_hum);
+      g_dht11_ctx.state = (g_dht11_ctx.result == 0)
+          ? DHT11_DONE : DHT11_ERROR;
+      return (g_dht11_ctx.result == 0)
+          ? DHT11_STEP_COMPLETE : DHT11_STEP_ERROR;
+
+    default:
+      g_dht11_ctx.result = -1;
+      g_dht11_ctx.state = DHT11_ERROR;
+      return DHT11_STEP_ERROR;
+  }
+}
+#endif
+
 static void Tau1_Run(void)
 {
   g_distance_cm = HCSR04_Read_cm_Blocking();
@@ -1076,12 +1169,6 @@ static void Tau_Control_Run(void)
 }
 #endif
 
-#if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
-#if ENABLE_REAL_TAU2
-#error "DHT11 is not yet supported by Chunked EDF"
-#endif
-#endif
-
 #if (SCHED_ALGO == SCHED_ALGO_EDF) || (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF)
 #if !ENABLE_SYNTH_CONTROL && !ENABLE_REAL_TAU1 && !ENABLE_SYNTH_LIDAR && \
     !ENABLE_SYNTH_IMU && !ENABLE_SYNTH_CAMERA && !ENABLE_REAL_TAU2
@@ -1115,7 +1202,7 @@ static SchedTaskRef_t g_sched_tasks[] =
   #endif
 
   #if ENABLE_REAL_TAU2
-    { &tau2, Tau2_Run, 0ULL, 1U, SCHED_TASK_BLOCKING_REAL },
+    { &tau2, Tau2_Run, 0ULL, 1U, SCHED_TASK_STAGED_DHT11 },
   #endif
 };
 
@@ -1408,6 +1495,15 @@ static uint8_t Scheduler_TaskReady(const SchedTaskRef_t *task_ref,
       #endif
     }
 
+    if (task_ref->kind == SCHED_TASK_STAGED_DHT11)
+    {
+      #if ENABLE_REAL_TAU2
+      return DHT11_Async_IsRunnable(now_us);
+      #else
+      return 0U;
+      #endif
+    }
+
     return 1U;
   }
 
@@ -1512,6 +1608,36 @@ static void Scheduler_RunChunkedHCSR04(Task_t *task)
 }
 #endif
 
+#if ENABLE_REAL_TAU2
+static void Scheduler_RunChunkedDHT11(Task_t *task)
+{
+  uint64_t exec_start = micros();
+  uint64_t exec_finish;
+  DHT11_StepResult_t step_result;
+
+  if (!task->job_active)
+  {
+    task->active_release_us = task->next_release_us;
+    task->remaining_exec_us = 0ULL;
+    task->accumulated_exec_us = 0ULL;
+    task->job_active = 1U;
+  }
+
+  step_result = DHT11_Async_Step(scheduler_now_us());
+  exec_finish = micros();
+  task->accumulated_exec_us += exec_finish - exec_start;
+
+  if ((step_result == DHT11_STEP_COMPLETE) ||
+      (step_result == DHT11_STEP_ERROR))
+  {
+    g_dht_res = g_dht11_ctx.result;
+    Task_SaveExecSample(task, task->accumulated_exec_us);
+    Scheduler_CompleteChunkedTask(task);
+    DHT11_Async_Reset();
+  }
+}
+#endif
+
 static void Scheduler_RunChunkedTask(SchedTaskRef_t *selected)
 {
   Task_t *task = selected->task;
@@ -1520,6 +1646,14 @@ static void Scheduler_RunChunkedTask(SchedTaskRef_t *selected)
   {
     #if ENABLE_REAL_TAU1
     Scheduler_RunChunkedHCSR04(task);
+    #endif
+    return;
+  }
+
+  if (selected->kind == SCHED_TASK_STAGED_DHT11)
+  {
+    #if ENABLE_REAL_TAU2
+    Scheduler_RunChunkedDHT11(task);
     #endif
     return;
   }
@@ -1627,6 +1761,10 @@ static void Reset_Profiling_Stats(void)
 
   #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
     HCSR04_Async_Reset();
+  #endif
+
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU2
+    DHT11_Async_Reset();
   #endif
 
 	#if ENABLE_SYNTH_IMU
@@ -3153,6 +3291,10 @@ static void Tasks_Init(void)
 	  tau2.deadline_ms = tau2.period_ms;
 	  tau2.next_release_ms = (uint32_t)(tau2.next_release_us / 1000ULL);
 	  Task_ResetStats(&tau2);
+
+    #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
+      DHT11_Async_Reset();
+    #endif
 	#endif
 
   #if ENABLE_SYNTH_IMU

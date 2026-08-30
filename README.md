@@ -123,7 +123,31 @@ Scalability modes 5 and 6 accept only `U65` and `U90`; they use 2, 3, or 4 tasks
 
 When `ENABLE_REAL_TAU1` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, HC-SR04 uses a staged transaction: the short trigger pulse runs synchronously, while ECHO rise/fall are captured by EXTI0 on PC0. The active job is not runnable while the sensor waits, so the scheduler can run other ready work. Its execution statistic contains only trigger/finalization CPU time; ECHO wait time contributes only to response time. Superloop and ordinary EDF retain the original blocking HC-SR04 baseline.
 
-DHT11 remains unsupported by Chunked EDF and intentionally produces a compile-time error when `ENABLE_REAL_TAU2` is `1`.
+| HC-SR04 state | Meaning | Scheduler status |
+| --- | --- | --- |
+| `IDLE` | No active measurement. A due release may start a new job. | Runnable when the release is due. |
+| `TRIGGER` | The scheduler emits the 2 us LOW then 10 us HIGH trigger pulse. | Runs synchronously, then moves immediately to `WAIT_ECHO_RISE`. |
+| `WAIT_ECHO_RISE` | The sensor has been triggered and the code waits for the ECHO rising edge on PC0. | Active, not runnable. EXTI0 records the edge; a timeout makes it runnable for error finalization. |
+| `WAIT_ECHO_FALL` | The ECHO rising edge was captured; the code waits for the falling edge. | Active, not runnable. EXTI0 records the edge; a timeout makes it runnable for error finalization. |
+| `COMPLETE` | Both ECHO timestamps are available, so the distance can be calculated. | Runnable once for finalization and whole-job statistics. |
+| `ERROR` | The expected ECHO edge did not arrive before its timeout. | Runnable once to publish the error and complete the job. |
+
+The EXTI handler only captures edge timestamps and changes the sensor state. It does not print UART messages or perform distance calculations. The original release and absolute deadline remain associated with the job from `TRIGGER` through `COMPLETE` or `ERROR`.
+
+### DHT11 with Chunked EDF
+
+When `ENABLE_REAL_TAU2` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, DHT11 drives PA5 LOW, then enters a scheduler-visible 30 ms `WAIT_START_LOW` state. It is active but not runnable during that interval. After the wait, the response and 40-bit transfer run as one atomic timing-critical step; they are not split into artificial EDF chunks. CPU execution statistics exclude the passive 30 ms wait, while response time includes it. Superloop and ordinary EDF retain the original blocking `HAL_Delay(30)` baseline.
+
+| DHT11 state | Meaning | Scheduler status |
+| --- | --- | --- |
+| `IDLE` | No active DHT11 transaction. A due release starts a new job. | Runnable when the release is due. |
+| `START_LOW` | PA5 is configured as output and driven LOW. The 30 ms wake-up time is stored. | A short setup action; it immediately enters `WAIT_START_LOW`. |
+| `WAIT_START_LOW` | The required DHT11 start-low interval is elapsing. | Active, not runnable until `now_us >= wait_until_us`. No busy-wait or `HAL_Delay(30)` is used here. |
+| `READ_TRANSACTION` | PA5 is released to input, then the DHT11 response and all 40 data bits are read. | Runnable and atomic. The microsecond polling loops must complete without an EDF yield. |
+| `DONE` | The checksum passed and temperature/humidity were updated. | The job completes once; `tau2_runs` and statistics are updated once. |
+| `ERROR` | A response timeout or checksum error occurred. | The job completes once and publishes the existing DHT11 error code. |
+
+For DHT11, response time is measured from the original release until `DONE` or `ERROR`, so it includes the 30 ms start-low interval. CPU execution time accumulates only the short setup and transaction code, not passive waiting.
 
 For a 10-second HC-SR04-only smoke test, edit the block at the top of `Core/Src/main.c` to:
 
@@ -142,6 +166,22 @@ For a 10-second HC-SR04-only smoke test, edit the block at the top of `Core/Src/
 ```
 
 `PC0` is configured as GPIO EXTI0 on both edges and EXTI0 IRQ priority 5. If CubeMX regenerates the project, retain PC0 as `GPIO_EXTI0`, rising/falling edge trigger with pulldown, and keep the generated `EXTI0_IRQHandler()` calling `HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0)`.
+
+For a DHT11-only 10-second smoke test, use:
+
+```c
+#define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
+#define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+#define PROFILE_WINDOW_US 10000000ULL
+
+#define ENABLE_REAL_TAU1 0
+#define ENABLE_REAL_TAU2 1
+#define ENABLE_SYNTH_IMU 0
+#define ENABLE_SYNTH_LIDAR 0
+#define ENABLE_SYNTH_CONTROL 0
+#define INTEGRATED_SYNTH_TASK_COUNT 2
+#define ENABLE_DEBUG_PRINT 1
+```
 
 ### Experiment modes
 

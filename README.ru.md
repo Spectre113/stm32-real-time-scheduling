@@ -123,7 +123,31 @@ Scalability-режимы 5 и 6 поддерживают только `U65` и `
 
 Когда `ENABLE_REAL_TAU1` равен `1`, а `SCHED_ALGO` - `SCHED_ALGO_CHUNKED_EDF`, для HC-SR04 используется staged-транзакция: короткий trigger pulse выполняется синхронно, а фронты ECHO RISE/FALL захватываются через EXTI0 на PC0. Пока датчик ожидает ECHO, job остаётся active, но не runnable, поэтому планировщик может выполнять другую готовую работу. В execution-статистику попадает только CPU-время trigger/finalization, а ожидание ECHO входит только в response time. Superloop и обычный EDF сохраняют прежний blocking baseline HC-SR04.
 
-DHT11 пока не поддерживается Chunked EDF: при `ENABLE_REAL_TAU2 = 1` намеренно возникает compile-time error.
+| Состояние HC-SR04 | Что означает | Состояние для планировщика |
+| --- | --- | --- |
+| `IDLE` | Активного измерения нет. При наступившем release можно начать новый job. | Runnable, когда release наступил. |
+| `TRIGGER` | Планировщик формирует trigger pulse: 2 us LOW, затем 10 us HIGH. | Короткий синхронный этап, после него сразу `WAIT_ECHO_RISE`. |
+| `WAIT_ECHO_RISE` | Датчик запущен, ожидается фронт ECHO RISE на PC0. | Active, но not runnable. EXTI0 сохраняет фронт; при timeout задача станет runnable для завершения с ошибкой. |
+| `WAIT_ECHO_FALL` | Фронт ECHO RISE уже захвачен, ожидается ECHO FALL. | Active, но not runnable. EXTI0 сохраняет фронт; при timeout задача станет runnable для завершения с ошибкой. |
+| `COMPLETE` | Оба timestamp ECHO получены, можно вычислить расстояние. | Runnable один раз для finalization и статистики полного job. |
+| `ERROR` | Ожидаемый фронт ECHO не пришёл до timeout. | Runnable один раз, чтобы сохранить ошибку и завершить job. |
+
+EXTI-обработчик только сохраняет timestamps фронтов и меняет состояние датчика. Он не выводит UART-сообщения и не вычисляет расстояние. Исходные release и absolute deadline сохраняются за job от `TRIGGER` до `COMPLETE` или `ERROR`.
+
+### DHT11 в Chunked EDF
+
+Когда `ENABLE_REAL_TAU2` равен `1`, а `SCHED_ALGO` - `SCHED_ALGO_CHUNKED_EDF`, DHT11 переводит PA5 в LOW и затем входит в видимое планировщику 30 ms состояние `WAIT_START_LOW`. В этот период job active, но не runnable. После ожидания response и передача 40 бит выполняются одним atomic timing-critical шагом, без искусственного разбиения на EDF-chunks. CPU execution statistics не включают пассивное ожидание 30 ms, но response time его включает. Superloop и обычный EDF сохраняют прежний blocking baseline с `HAL_Delay(30)`.
+
+| Состояние DHT11 | Что означает | Состояние для планировщика |
+| --- | --- | --- |
+| `IDLE` | Активной транзакции DHT11 нет. Наступивший release начинает новый job. | Runnable, когда release наступил. |
+| `START_LOW` | PA5 настраивается как output и переводится в LOW. Сохраняется время пробуждения через 30 ms. | Короткий setup-этап, сразу переходит в `WAIT_START_LOW`. |
+| `WAIT_START_LOW` | Идёт обязательный DHT11-интервал start-low. | Active, но not runnable до `now_us >= wait_until_us`. Здесь нет ни busy-wait, ни `HAL_Delay(30)`. |
+| `READ_TRANSACTION` | PA5 переключается в input, затем считываются response DHT11 и все 40 бит данных. | Runnable и atomic. Микросекундные polling-loops должны завершиться без EDF yield. |
+| `DONE` | Checksum прошёл, температура и влажность обновлены. | Job завершается один раз; `tau2_runs` и статистика обновляются один раз. |
+| `ERROR` | Возник timeout ответа или ошибка checksum. | Job завершается один раз, сохраняется прежний код ошибки DHT11. |
+
+Для DHT11 response time отсчитывается от исходного release до `DONE` или `ERROR`, поэтому включает 30 ms start-low. CPU execution time накапливает только короткий setup и транзакцию, а пассивное ожидание не учитывает.
 
 Для 10-секундного smoke-теста только HC-SR04 измените блок в начале `Core/Src/main.c` так:
 
@@ -142,6 +166,22 @@ DHT11 пока не поддерживается Chunked EDF: при `ENABLE_REA
 ```
 
 PC0 настроен как GPIO EXTI0 на оба фронта, приоритет EXTI0 IRQ - 5. Если проект регенерируется в CubeMX, сохраните для PC0 `GPIO_EXTI0`, триггер RISE/FALL с pulldown и сгенерированный `EXTI0_IRQHandler()`, вызывающий `HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0)`.
+
+Для 10-секундного smoke-теста только DHT11 используйте:
+
+```c
+#define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
+#define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
+#define PROFILE_WINDOW_US 10000000ULL
+
+#define ENABLE_REAL_TAU1 0
+#define ENABLE_REAL_TAU2 1
+#define ENABLE_SYNTH_IMU 0
+#define ENABLE_SYNTH_LIDAR 0
+#define ENABLE_SYNTH_CONTROL 0
+#define INTEGRATED_SYNTH_TASK_COUNT 2
+#define ENABLE_DEBUG_PRINT 1
+```
 
 ### Режимы экспериментов
 
