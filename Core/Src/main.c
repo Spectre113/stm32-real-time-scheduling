@@ -67,7 +67,7 @@
 #endif
 
 #ifndef SCHED_ALGO
-  #define SCHED_ALGO SCHED_ALGO_SUPERLOOP
+  #define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
 #endif
 
 #ifndef EXPERIMENT_MODE
@@ -126,7 +126,7 @@
 
 /* UART debug output alters timing; use 0 for measurements. */
 #ifndef ENABLE_DEBUG_PRINT
-  #define ENABLE_DEBUG_PRINT 1
+  #define ENABLE_DEBUG_PRINT 0
 #endif
 
 /* Full polling statistics are used by the integrated experiment. */
