@@ -30,10 +30,9 @@
  * ============================================================================
  */
 
-/* Scheduler used only by EXPERIMENT_INTEGRATED. */
+/* Scheduler used by EXPERIMENT_INTEGRATED. */
 #define SCHED_ALGO_SUPERLOOP    0
-#define SCHED_ALGO_EDF          1
-#define SCHED_ALGO_CHUNKED_EDF  2
+#define SCHED_ALGO_CHUNKED_EDF  1
 
 /* Workload scenarios: the U number is the target total synthetic utilization. */
 #define WORKLOAD_SCENARIO_U50    0
@@ -67,7 +66,7 @@
 #endif
 
 #ifndef SCHED_ALGO
-  #define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
+  #define SCHED_ALGO SCHED_ALGO_SUPERLOOP
 #endif
 
 #ifndef EXPERIMENT_MODE
@@ -287,7 +286,6 @@
 #define EXEC_HIST_BINS 10
 
 #if (SCHED_ALGO != SCHED_ALGO_SUPERLOOP) && \
-    (SCHED_ALGO != SCHED_ALGO_EDF) && \
     (SCHED_ALGO != SCHED_ALGO_CHUNKED_EDF)
 #error "Unsupported scheduler algorithm"
 #endif
@@ -296,10 +294,7 @@
 #error "EDF_CHUNK_US must be greater than zero"
 #endif
 
-#if SCHED_ALGO == SCHED_ALGO_EDF
-  #define SCHED_ALGO_NAME "EDF"
-  #define SCHED_CSV_CHUNK_US 0ULL
-#elif SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
+#if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
   #define SCHED_ALGO_NAME "CHUNKED_EDF"
   #define SCHED_CSV_CHUNK_US EDF_CHUNK_US
 #else
@@ -741,7 +736,7 @@ static inline uint32_t Correct_DWT_Delta(uint32_t delta,
   #endif
 #endif
 
-/* Blocking baseline retained for Superloop and ordinary EDF. */
+/* Blocking baseline retained for Superloop. */
 static int HCSR04_Read_cm_Blocking(void)
 {
 	uint64_t start_time;
@@ -1057,7 +1052,7 @@ static int DHT11_ReadTransaction(uint8_t *temp, uint8_t *hum)
   return 0;
 }
 
-/* Blocking baseline retained for Superloop and ordinary EDF. */
+/* Blocking baseline retained for Superloop. */
 static int DHT11_Read(uint8_t *temp, uint8_t *hum)
 {
   DHT11_SetOutput();
@@ -1169,10 +1164,10 @@ static void Tau_Control_Run(void)
 }
 #endif
 
-#if (SCHED_ALGO == SCHED_ALGO_EDF) || (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF)
+#if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
 #if !ENABLE_SYNTH_CONTROL && !ENABLE_REAL_TAU1 && !ENABLE_SYNTH_LIDAR && \
     !ENABLE_SYNTH_IMU && !ENABLE_SYNTH_CAMERA && !ENABLE_REAL_TAU2
-#error "EDF scheduler requires at least one enabled task"
+#error "Chunked EDF requires at least one enabled task"
 #endif
 
 static SchedTaskRef_t g_sched_tasks[] =
@@ -1410,64 +1405,6 @@ static void Task_UpdateResponseStats(Task_t *task, uint64_t response_us)
     }
   }
 }
-
-#if SCHED_ALGO == SCHED_ALGO_EDF
-static SchedTaskRef_t *Scheduler_SelectEDF(SchedTaskRef_t *tasks,
-                                           uint32_t count,
-                                           uint64_t now_us)
-{
-  SchedTaskRef_t *selected = NULL;
-  uint64_t selected_deadline_us = 0;
-
-  for (uint32_t i = 0; i < count; i++)
-  {
-    Task_t *task = tasks[i].task;
-
-    if (!tasks[i].enabled || task == NULL || tasks[i].run == NULL)
-    {
-      continue;
-    }
-
-    if ((int64_t)(now_us - task->next_release_us) < 0)
-    {
-      continue;
-    }
-
-    uint64_t absolute_deadline_us = task->next_release_us + task->deadline_us;
-
-    if (selected == NULL || absolute_deadline_us < selected_deadline_us)
-    {
-      selected = &tasks[i];
-      selected_deadline_us = absolute_deadline_us;
-    }
-  }
-
-  return selected;
-}
-
-static void Scheduler_RunTask(SchedTaskRef_t *selected)
-{
-  Task_t *task = selected->task;
-  uint64_t release_us = task->next_release_us;
-
-  uint64_t exec_start = micros();
-
-  selected->run();
-
-  uint64_t exec_finish = micros();
-  uint64_t finish_us = scheduler_now_us();
-
-  uint64_t exec_time = exec_finish - exec_start;
-  uint64_t response_time = finish_us - release_us;
-
-  Task_UpdateExecStats(task, exec_time);
-  Task_SaveExecSample(task, exec_time);
-  Task_UpdateResponseStats(task, response_time);
-  Task_CheckDeadline(task, response_time);
-
-  Task_AdvanceRelease(task, finish_us);
-}
-#endif
 
 #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
 static uint64_t Scheduler_TaskAbsoluteDeadline(Task_t *task)
@@ -3721,25 +3658,6 @@ int main(void)
         Task_AdvanceRelease(&tau2, finish_us);
       }
     #endif
-
-    #elif SCHED_ALGO == SCHED_ALGO_EDF
-
-    sched_start_cycles = DWT->CYCCNT;
-    SchedTaskRef_t *selected_task = Scheduler_SelectEDF(g_sched_tasks,
-                                                        g_sched_task_count,
-                                                        now_us);
-    sched_end_cycles = DWT->CYCCNT;
-    scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
-
-    #if ENABLE_POLLING_PROFILE
-      Polling_UpdateStats(scheduler_cycles_this_loop);
-    #endif
-
-    if (selected_task != NULL)
-    {
-      Scheduler_UpdateStats(scheduler_cycles_this_loop);
-      Scheduler_RunTask(selected_task);
-    }
 
     #elif SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
 

@@ -2,7 +2,7 @@
 
 [Русская версия](README.ru.md)
 
-STM32CubeIDE project for studying real-time scheduling algorithms on an `STM32F767ZITx`: a non-preemptive Superloop, non-preemptive EDF, and Chunked EDF that cooperatively splits synthetic work into chunks. The firmware runs synthetic periodic tasks, measures their execution, and writes results to the serial port.
+STM32CubeIDE project for studying real-time scheduling algorithms on an `STM32F767ZITx`: a non-preemptive Superloop and Chunked EDF that cooperatively splits synthetic work into chunks. The firmware runs synthetic periodic tasks, measures their execution, and writes results to the serial port.
 
 By default, the clean Superloop profile runs scenario `U65` for 60 seconds. It then prints a report and a CSV row to UART.
 
@@ -76,7 +76,7 @@ Edit the documented configuration block at the top of [`Core/Src/main.c`](Core/S
 | Macro | What it controls |
 | --- | --- |
 | `WORKLOAD_SCENARIO` | Workload scenario `U50`-`U110`. |
-| `SCHED_ALGO` | Scheduler of the integrated experiment: Superloop, EDF, or Chunked EDF. It is not used by modes 3 and 4. |
+| `SCHED_ALGO` | Scheduler of the integrated experiment: Superloop or Chunked EDF. It is not used by modes 3-6. |
 | `EXPERIMENT_MODE` | Run type and collected statistics. |
 | `INTEGRATED_SYNTH_TASK_COUNT` | Synthetic task count in the integrated mode: `2` (IMU + LiDAR) or `3` (IMU + LiDAR + Camera). |
 | `MINIMAL_PROFILE_WINDOW_US` | Window for modes 3 and 4; `60000000ULL` (60 seconds) by default. |
@@ -116,12 +116,11 @@ Scalability modes 5 and 6 accept only `U65` and `U90`; they use 2, 3, or 4 tasks
 | Constant | Purpose |
 | --- | --- |
 | `SCHED_ALGO_SUPERLOOP` | Fixed non-preemptive order of ready tasks. |
-| `SCHED_ALGO_EDF` | Non-preemptive EDF: selects the ready task with the nearest absolute deadline and runs it to completion. |
 | `SCHED_ALGO_CHUNKED_EDF` | EDF with synthetic work split into `EDF_CHUNK_US` chunks; the scheduler chooses again after each chunk. HC-SR04 uses a separate staged EXTI path rather than fake synthetic chunks. This is cooperative scheduling, not hardware preemption or interrupt-driven context switching. |
 
 ### HC-SR04 with Chunked EDF
 
-When `ENABLE_REAL_TAU1` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, HC-SR04 uses a staged transaction: the short trigger pulse runs synchronously, while ECHO rise/fall are captured by EXTI0 on PC0. The active job is not runnable while the sensor waits, so the scheduler can run other ready work. Its execution statistic contains only trigger/finalization CPU time; ECHO wait time contributes only to response time. Superloop and ordinary EDF retain the original blocking HC-SR04 baseline.
+When `ENABLE_REAL_TAU1` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, HC-SR04 uses a staged transaction: the short trigger pulse runs synchronously, while ECHO rise/fall are captured by EXTI0 on PC0. The active job is not runnable while the sensor waits, so the scheduler can run other ready work. Its execution statistic contains only trigger/finalization CPU time; ECHO wait time contributes only to response time. Superloop retains the original blocking HC-SR04 baseline.
 
 | HC-SR04 state | Meaning | Scheduler status |
 | --- | --- | --- |
@@ -136,7 +135,7 @@ The EXTI handler only captures edge timestamps and changes the sensor state. It 
 
 ### DHT11 with Chunked EDF
 
-When `ENABLE_REAL_TAU2` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, DHT11 drives PA5 LOW, then enters a scheduler-visible 30 ms `WAIT_START_LOW` state. It is active but not runnable during that interval. After the wait, the response and 40-bit transfer run as one atomic timing-critical step; they are not split into artificial EDF chunks. CPU execution statistics exclude the passive 30 ms wait, while response time includes it. Superloop and ordinary EDF retain the original blocking `HAL_Delay(30)` baseline.
+When `ENABLE_REAL_TAU2` is `1` and `SCHED_ALGO` is `SCHED_ALGO_CHUNKED_EDF`, DHT11 drives PA5 LOW, then enters a scheduler-visible 30 ms `WAIT_START_LOW` state. It is active but not runnable during that interval. After the wait, the response and 40-bit transfer run as one atomic timing-critical step; they are not split into artificial EDF chunks. CPU execution statistics exclude the passive 30 ms wait, while response time includes it. Superloop retains the original blocking `HAL_Delay(30)` baseline.
 
 | DHT11 state | Meaning | Scheduler status |
 | --- | --- | --- |
@@ -195,7 +194,7 @@ For a DHT11-only 10-second smoke test, use:
 | `EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN` (`5`) | Clean busy-polling Superloop scalability profile with 2, 3, or 4 synthetic tasks. |
 | `EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS` (`6`) | Diagnostic scalability profile of readiness checks and release maintenance. |
 
-In modes 3 and 4, `SCHED_ALGO` is not used: they run their own two-task busy-polling Superloop. `SCHED_ALGO` affects `EXPERIMENT_INTEGRATED` only.
+In modes 3-6, `SCHED_ALGO` is not used: they run their own synthetic Superloop profiles. `SCHED_ALGO` affects `EXPERIMENT_INTEGRATED` only.
 
 Modes 5 and 6 also use their own fixed-order busy-polling Superloop and do not use `SCHED_ALGO`.
 
@@ -223,7 +222,7 @@ Superloop profiles use a different pair: `tau1` has a 10 ms period and `tau2` a 
 
 ## Further work
 
-The current project stage focuses on reproducible comparison of Superloop, EDF, and Chunked EDF on synthetic periodic tasks, and on measuring scheduler overhead.
+The current project stage focuses on reproducible comparison of Superloop and Chunked EDF on synthetic periodic tasks, and on measuring scheduler overhead.
 
 The next stage will develop and optimize Chunked EDF with real tasks and sensors. Planned work includes moving chunking from synthetic workloads to real I/O operations and studying platform limitations.
 
