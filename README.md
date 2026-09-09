@@ -239,6 +239,7 @@ The next stage will develop and optimize Chunked EDF with real tasks and sensors
 | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [`Core/`](Core/)                                                                                         | Application code, including [`main.c`](Core/Src/main.c), interrupt handlers, and system files. |
 | [`Drivers/`](Drivers/)                                                                                   | STM32F7 HAL and CMSIS.                                                                         |
+| [`docs/`](docs/)                                                                                         | Links to the maintained presentation and Colab analysis notebook.                              |
 | [`tools/experiment_runner/`](tools/experiment_runner/)                                                   | Automated build, flashing, UART capture, and CSV aggregation.                                  |
 | [`demonstration.ioc`](demonstration.ioc)                                                                 | CubeMX configuration: peripherals, pins, and clocks.                                           |
 | [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | STM32CubeIDE/Eclipse project files.                                                            |

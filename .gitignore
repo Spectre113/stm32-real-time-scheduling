@@ -23,6 +23,9 @@ node_modules/
 __pycache__/
 *.py[cod]
 
+# Local STM32CubeIDE indexer state
+.settings/language.settings.xml
+
 # Automated experiment output
 results/
 
