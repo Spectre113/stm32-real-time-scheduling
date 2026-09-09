@@ -26,6 +26,10 @@ __pycache__/
 # Automated experiment output
 results/
 
+# Local reference material and presentation exports
+docs/references/
+docs/presentation/
+
 # OS/editor junk
 Thumbs.db
 Desktop.ini

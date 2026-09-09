@@ -239,15 +239,12 @@ The next stage will develop and optimize Chunked EDF with real tasks and sensors
 | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [`Core/`](Core/)                                                                                         | Application code, including [`main.c`](Core/Src/main.c), interrupt handlers, and system files. |
 | [`Drivers/`](Drivers/)                                                                                   | STM32F7 HAL and CMSIS.                                                                         |
-| [`docs/references/`](docs/references/)                                                                   | Papers and other sources.                                                                      |
-| [`docs/presentation/`](docs/presentation/)                                                               | Presentation and system-model figures.                                                         |
-| [`notebooks/`](notebooks/)                                                                               | Colab notebook for result processing and plots.                                                |
 | [`tools/experiment_runner/`](tools/experiment_runner/)                                                   | Automated build, flashing, UART capture, and CSV aggregation.                                  |
 | [`demonstration.ioc`](demonstration.ioc)                                                                 | CubeMX configuration: peripherals, pins, and clocks.                                           |
 | [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | STM32CubeIDE/Eclipse project files.                                                            |
 | [`demonstration Debug.launch`](<demonstration Debug.launch>)                                             | IDE run and debug configuration.                                                               |
 
-`Debug/` and `Release/` are generated build outputs. `node_modules/` contains JavaScript dependencies. They are ignored by Git and must not be committed.
+`Debug/` and `Release/` are generated build outputs. `node_modules/` contains JavaScript dependencies. Local reference PDFs and presentation exports under `docs/` are also ignored; the current presentation and result-processing notebook are available through the links below. None of these files should be committed.
 
 ## Troubleshooting
 
