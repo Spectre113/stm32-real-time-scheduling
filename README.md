@@ -71,6 +71,7 @@ See the [automation guide](tools/experiment_runner/README.md) for setup, matrice
 | [`Core/`](Core/) | Application code, configuration, interrupt handlers, and startup code. |
 | [`Drivers/`](Drivers/) | STM32F7 HAL and CMSIS supplied by STM32Cube. |
 | [`docs/`](docs/) | Concise technical documentation and links to maintained online materials. |
+| [`thesis/`](thesis/) | LaTeX sources, figures, and the generated PDF of the thesis proposal. |
 | [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation. |
 | [`demonstration.ioc`](demonstration.ioc) | CubeMX pin, clock, and peripheral configuration. |
 | [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | STM32CubeIDE project metadata. |

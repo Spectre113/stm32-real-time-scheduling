@@ -71,6 +71,7 @@ UART-вывод появляется только после окончания 
 | [`Core/`](Core/) | Код приложения, конфигурация, обработчики прерываний и стартовый код. |
 | [`Drivers/`](Drivers/) | HAL и CMSIS для STM32F7 из STM32Cube. |
 | [`docs/`](docs/) | Краткая техническая документация и ссылки на поддерживаемые онлайн-материалы. |
+| [`thesis/`](thesis/) | LaTeX-исходники, рисунки и итоговый PDF thesis proposal. |
 | [`tools/experiment_runner/`](tools/experiment_runner/) | Автоматическая сборка, прошивка, захват UART и сводка CSV. |
 | [`demonstration.ioc`](demonstration.ioc) | Конфигурация выводов, часов и периферии CubeMX. |
 | [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | Метаданные проекта STM32CubeIDE. |
