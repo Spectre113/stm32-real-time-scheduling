@@ -26,6 +26,17 @@ __pycache__/
 # Local STM32CubeIDE indexer state
 .settings/language.settings.xml
 
+# LaTeX intermediate build files
+thesis/**/*.aux
+thesis/**/*.log
+thesis/**/*.out
+thesis/**/*.toc
+thesis/**/*.synctex.gz
+thesis/**/*.fls
+thesis/**/*.fdb_latexmk
+thesis/**/*.bbl
+thesis/**/*.blg
+
 # Automated experiment output
 results/
 
