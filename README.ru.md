@@ -21,16 +21,16 @@ HC-SR04 и DHT11 необязательны. В текущей ручной ко
 ## Быстрый запуск
 
 1. Клонируйте репозиторий или распакуйте архив.
-2. В STM32CubeIDE выберите `File -> Import... -> General -> Existing Projects into Workspace`, укажите корень репозитория и завершите импорт.
+2. В STM32CubeIDE выберите `File -> Import... -> General -> Existing Projects into Workspace`, укажите [`implementation/`](implementation/) и завершите импорт.
 3. Подключите плату к USB-разъёму ST-LINK и соберите проект через `Project -> Build All`.
 4. Откройте ST-LINK Virtual COM Port в терминале до запуска прошивки: `115200`, `8N1`, без parity и flow control.
 5. Нажмите `Run` или `Debug`. STM32CubeIDE прошьёт микроконтроллер и запустит программу.
 
-Если COM-порт не появился, переподключите плату и обновите драйвер ST-LINK. В проекте используется `USART3` (`PD8` - TX, `PD9` - RX); см. [`demonstration.ioc`](demonstration.ioc).
+Если COM-порт не появился, переподключите плату и обновите драйвер ST-LINK. В проекте используется `USART3` (`PD8` - TX, `PD9` - RX); см. [`implementation/demonstration.ioc`](implementation/demonstration.ioc).
 
 ## Настройка и запуск эксперимента
 
-Все ручные переключатели собраны в начале [`Core/Src/main.c`](Core/Src/main.c). После изменения требуется собрать и заново прошить проект. Текущие значения по умолчанию: `U50`, Superloop, интегрированный профиль, окно 60 секунд и оба физических датчика включены.
+Все ручные переключатели собраны в начале [`implementation/Core/Src/main.c`](implementation/Core/Src/main.c). После изменения требуется собрать и заново прошить проект. Текущие значения по умолчанию: `U50`, Superloop, интегрированный профиль, окно 60 секунд и оба физических датчика включены.
 
 ```c
 #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U50
@@ -68,15 +68,12 @@ UART-вывод появляется только после окончания 
 
 | Путь | Содержимое |
 | --- | --- |
-| [`Core/`](Core/) | Код приложения, конфигурация, обработчики прерываний и стартовый код. |
-| [`Drivers/`](Drivers/) | HAL и CMSIS для STM32F7 из STM32Cube. |
+| [`implementation/`](implementation/) | Самодостаточная реализация для STM32CubeIDE: код приложения, HAL/CMSIS, конфигурация CubeMX, метаданные IDE и локальный build-output. |
 | [`docs/`](docs/) | Краткая техническая документация и ссылки на поддерживаемые онлайн-материалы. |
 | [`thesis/`](thesis/) | LaTeX-исходники, рисунки и итоговый PDF thesis proposal. |
 | [`tools/experiment_runner/`](tools/experiment_runner/) | Автоматическая сборка, прошивка, захват UART и сводка CSV. |
-| [`demonstration.ioc`](demonstration.ioc) | Конфигурация выводов, часов и периферии CubeMX. |
-| [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | Метаданные проекта STM32CubeIDE. |
 
-`Debug/`, `Release/`, `results/`, Python-кэш и локальные статьи/экспорты презентации являются генерируемыми или личными материалами и игнорируются Git.
+`implementation/Debug/`, `implementation/Release/`, `results/`, Python-кэш и локальные статьи/экспорты презентации являются генерируемыми или личными материалами и игнорируются Git.
 
 ## Ссылки
 

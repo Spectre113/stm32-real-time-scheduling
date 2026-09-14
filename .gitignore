@@ -24,7 +24,7 @@ __pycache__/
 *.py[cod]
 
 # Local STM32CubeIDE indexer state
-.settings/language.settings.xml
+implementation/.settings/language.settings.xml
 
 # LaTeX intermediate build files
 thesis/**/*.aux

@@ -2,7 +2,7 @@
 
 [English version](configuration.md)
 
-Изменяйте документированный блок в начале [`Core/Src/main.c`](../Core/Src/main.c), затем соберите и прошейте проект. [`Core/Inc/experiment_config.h`](../Core/Inc/experiment_config.h) используется только для временных override автоматического runner и обычно не изменяется.
+Изменяйте документированный блок в начале [`implementation/Core/Src/main.c`](../implementation/Core/Src/main.c), затем соберите и прошейте проект. [`implementation/Core/Inc/experiment_config.h`](../implementation/Core/Inc/experiment_config.h) используется только для временных override автоматического runner и обычно не изменяется.
 
 Все значения времени задаются в микросекундах и имеют суффикс `ULL`. Для сопоставимых измерений используйте одинаковые сценарий и окно измерения во всех сравниваемых запусках.
 

@@ -21,16 +21,16 @@ HC-SR04 and DHT11 are optional. The default manual configuration enables them, s
 ## Quick start
 
 1. Clone the repository or extract its archive.
-2. In STM32CubeIDE choose `File -> Import... -> General -> Existing Projects into Workspace`, select the repository root, and finish the import.
+2. In STM32CubeIDE choose `File -> Import... -> General -> Existing Projects into Workspace`, select [`implementation/`](implementation/), and finish the import.
 3. Connect the board to the ST-LINK USB connector and build with `Project -> Build All`.
 4. Open the ST-LINK Virtual COM Port in a terminal before starting firmware: `115200`, `8N1`, no parity, no flow control.
 5. Click `Run` or `Debug`. STM32CubeIDE flashes the board and starts the program.
 
-If no COM port appears, reconnect the board and update the ST-LINK driver. The project uses `USART3` (`PD8` TX, `PD9` RX); see [`demonstration.ioc`](demonstration.ioc).
+If no COM port appears, reconnect the board and update the ST-LINK driver. The project uses `USART3` (`PD8` TX, `PD9` RX); see [`implementation/demonstration.ioc`](implementation/demonstration.ioc).
 
 ## Configure and run an experiment
 
-The manual switches are grouped at the top of [`Core/Src/main.c`](Core/Src/main.c). Rebuild and flash after changing them. The current defaults are `U50`, Superloop, integrated profiling, a 60-second window, and both physical sensors enabled.
+The manual switches are grouped at the top of [`implementation/Core/Src/main.c`](implementation/Core/Src/main.c). Rebuild and flash after changing them. The current defaults are `U50`, Superloop, integrated profiling, a 60-second window, and both physical sensors enabled.
 
 ```c
 #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U50
@@ -68,15 +68,12 @@ See the [automation guide](tools/experiment_runner/README.md) for setup, matrice
 
 | Path | Contents |
 | --- | --- |
-| [`Core/`](Core/) | Application code, configuration, interrupt handlers, and startup code. |
-| [`Drivers/`](Drivers/) | STM32F7 HAL and CMSIS supplied by STM32Cube. |
+| [`implementation/`](implementation/) | Self-contained STM32CubeIDE implementation: application code, HAL/CMSIS, CubeMX configuration, IDE metadata, and local build output. |
 | [`docs/`](docs/) | Concise technical documentation and links to maintained online materials. |
 | [`thesis/`](thesis/) | LaTeX sources, figures, and the generated PDF of the thesis proposal. |
 | [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation. |
-| [`demonstration.ioc`](demonstration.ioc) | CubeMX pin, clock, and peripheral configuration. |
-| [`.project`](.project), [`.cproject`](.cproject), [`.mxproject`](.mxproject), [`.settings/`](.settings/) | STM32CubeIDE project metadata. |
 
-`Debug/`, `Release/`, `results/`, Python caches, and local reference/presentation files are generated or personal material and are ignored by Git.
+`implementation/Debug/`, `implementation/Release/`, `results/`, Python caches, and local reference/presentation files are generated or personal material and are ignored by Git.
 
 ## Links
 

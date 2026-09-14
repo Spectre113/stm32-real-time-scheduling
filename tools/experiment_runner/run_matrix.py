@@ -26,9 +26,10 @@ except ImportError as error:
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_HEADER = REPOSITORY_ROOT / "Core" / "Inc" / "experiment_config.h"
+FIRMWARE_ROOT = REPOSITORY_ROOT / "implementation"
+CONFIG_HEADER = FIRMWARE_ROOT / "Core" / "Inc" / "experiment_config.h"
 PROJECT_NAME = "demonstration"
-FIRMWARE_PATH = REPOSITORY_ROOT / "Debug" / "demonstration.elf"
+FIRMWARE_PATH = FIRMWARE_ROOT / "Debug" / "demonstration.elf"
 
 SCENARIO_MACROS = {
     "U50": "WORKLOAD_SCENARIO_U50",
@@ -282,7 +283,7 @@ def build_firmware(
 ) -> None:
     command = [str(headless_builder), "-data", str(workspace)]
     if import_project:
-        command.extend(["-import", str(REPOSITORY_ROOT)])
+        command.extend(["-import", str(FIRMWARE_ROOT)])
     command.extend(["-cleanBuild", f"{PROJECT_NAME}/{build_configuration}"])
     run_command(command, cwd=REPOSITORY_ROOT, log_path=log_path)
 

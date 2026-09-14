@@ -96,4 +96,4 @@ py tools\experiment_runner\run_matrix.py --port COM5 --headless-builder C:\path\
 }
 ```
 
-Для каждого запуска скрипт временно переписывает [`Core/Inc/experiment_config.h`](../../Core/Inc/experiment_config.h), а в конце - даже при ошибке или `Ctrl+C` - восстанавливает исходное содержимое. После принудительного выключения ПК проверьте этот файл через `git diff` перед ручной сборкой.
+Для каждого запуска скрипт временно переписывает [`implementation/Core/Inc/experiment_config.h`](../../implementation/Core/Inc/experiment_config.h), а в конце - даже при ошибке или `Ctrl+C` - восстанавливает исходное содержимое. После принудительного выключения ПК проверьте этот файл через `git diff` перед ручной сборкой.

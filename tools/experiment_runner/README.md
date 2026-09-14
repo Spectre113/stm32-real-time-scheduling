@@ -97,4 +97,4 @@ Copy `matrix.default.json`, keep the required scenarios, windows, and modes, the
 }
 ```
 
-For each run, the script temporarily rewrites [`Core/Inc/experiment_config.h`](../../Core/Inc/experiment_config.h). It restores the original file even after an error or `Ctrl+C`. After a forced PC shutdown, check that file with `git diff` before a manual build.
+For each run, the script temporarily rewrites [`implementation/Core/Inc/experiment_config.h`](../../implementation/Core/Inc/experiment_config.h). It restores the original file even after an error or `Ctrl+C`. After a forced PC shutdown, check that file with `git diff` before a manual build.
