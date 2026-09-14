@@ -36,6 +36,7 @@ thesis/**/*.fls
 thesis/**/*.fdb_latexmk
 thesis/**/*.bbl
 thesis/**/*.blg
+thesis/**/*.lod
 
 # Automated experiment output
 results/
