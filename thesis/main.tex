@@ -48,49 +48,39 @@ The experimental platform consists of a single-core STM32 microcontroller and ex
   \label{fig:stm32_hw}
 \end{figure}
 
-The hardware components used in the experiments\\ are summarized in Table~\ref{tab:hardware}.
+The hardware components are presented in Table~\ref{tab:hardware}.
 
 \begin{table}[H]
-  \centering
-  \caption{Experimental hardware platform.}
-  \label{tab:hardware}
-
-  \small
-  \renewcommand{\arraystretch}{1.15}
-  \setlength{\tabcolsep}{4pt}
-
-  \begin{tabularx}{\columnwidth}{
-    l
-    >{\centering\arraybackslash}X
-    >{\centering\arraybackslash}X}
-    \hline
-    \textbf{Component} &
-    \textbf{Details} &
-    \textbf{Purpose} \\
-    \hline
-
-    STM32F767 &
-    Cortex-M7, TODO MHz &
-    Scheduling and task execution \\
-
-    Sensor 1 &
-    TODO &
-    TODO \\
-
-    Sensor 2 &
-    TODO &
-    TODO \\
-
-    Sensor 3 &
-    TODO &
-    TODO \\
-
-    Sensor 4 &
-    TODO &
-    TODO \\
-
-    \hline
-  \end{tabularx}
+	\centering
+	\caption{Experimental hardware platform.}
+	\label{tab:hardware}
+	
+	\small
+	\renewcommand{\arraystretch}{1.15}
+	\setlength{\tabcolsep}{6pt}
+	
+	\begin{tabularx}{\columnwidth}{
+			l
+			>{\centering\arraybackslash}X}
+		\hline
+		\textbf{Component} &
+		\textbf{Purpose} \\
+		\hline
+		
+		STM32F767 &
+		Scheduling and task execution \\
+		
+		DHT11 &
+		Temperature and humidity measurement \\
+		
+		HC-SR04 &
+		Distance measurement \\
+		
+		OV2640 &
+		Image capturing \\
+		
+		\hline
+	\end{tabularx}
 \end{table}
 
 \subsection{Super Loop Scheduler}
