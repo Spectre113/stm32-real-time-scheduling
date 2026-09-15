@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import hashlib
+import shutil
 import os
 import subprocess
 import sys
@@ -29,7 +31,10 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FIRMWARE_ROOT = REPOSITORY_ROOT / "implementation"
 CONFIG_HEADER = FIRMWARE_ROOT / "Core" / "Inc" / "experiment_config.h"
 PROJECT_NAME = "demonstration"
-FIRMWARE_PATH = FIRMWARE_ROOT / "Debug" / "demonstration.elf"
+def firmware_path(build_configuration: str) -> Path:
+    if build_configuration not in {"Debug", "Release"}:
+        raise ValueError("build_configuration must be Debug or Release")
+    return FIRMWARE_ROOT / build_configuration / "demonstration.elf"
 
 SCENARIO_MACROS = {
     "U50": "WORKLOAD_SCENARIO_U50",
@@ -72,6 +77,9 @@ SUMMARY_FIELDS = [
     "SCENARIO",
     "U",
     "WINDOW_US",
+    "DEVICE_WINDOW_TARGET_US",
+    "SYNTH_U_X10000",
+    "REAL_TASKS",
     "TAU1_RUNS",
     "TAU2_RUNS",
     "TAU3_RUNS",
@@ -192,6 +200,13 @@ def load_matrix(path: Path) -> dict[str, Any]:
             allowed_text = ", ".join(str(count) for count in sorted(allowed_counts))
             raise SystemExit(f"task_counts must contain only {allowed_text}.")
 
+    if any(type(w) is not int or w <= 0 or w > 0xFFFFFFFF for w in matrix["windows_us"]):
+        raise SystemExit("windows_us must contain positive 32-bit integers")
+    firmware_path(matrix.get("build_configuration", "Debug"))
+    if matrix.get("scheduler_algorithm", "SCHED_ALGO_SUPERLOOP") not in {"SCHED_ALGO_SUPERLOOP", "SCHED_ALGO_CHUNKED_EDF"}:
+        raise SystemExit("Unsupported scheduler_algorithm")
+    if int(matrix.get("edf_chunk_us", 1000)) <= 0:
+        raise SystemExit("edf_chunk_us must be positive")
     if int(matrix.get("repeats", 1)) < 1:
         raise SystemExit("Matrix field 'repeats' must be at least 1.")
     return matrix
@@ -280,25 +295,29 @@ def build_firmware(
     build_configuration: str,
     import_project: bool,
     log_path: Path,
-) -> None:
+) -> Path:
+    output_path = firmware_path(build_configuration)
+    # A successful process exit alone must never authorize flashing stale output.
+    output_path.unlink(missing_ok=True)
     command = [str(headless_builder), "-data", str(workspace)]
     if import_project:
         command.extend(["-import", str(FIRMWARE_ROOT)])
     command.extend(["-cleanBuild", f"{PROJECT_NAME}/{build_configuration}"])
     run_command(command, cwd=REPOSITORY_ROOT, log_path=log_path)
 
-    if not FIRMWARE_PATH.is_file():
-        raise RuntimeError(f"Build completed but firmware is missing: {FIRMWARE_PATH}")
+    if not output_path.is_file():
+        raise RuntimeError(f"Build completed but firmware is missing: {output_path}")
+    return output_path
 
 
-def flash_firmware(programmer: Path, frequency_khz: int, log_path: Path) -> None:
+def flash_firmware(programmer: Path, frequency_khz: int, log_path: Path, output_path: Path) -> None:
     command = [
         str(programmer),
         "-c",
         "port=SWD",
         f"freq={frequency_khz}",
         "-w",
-        str(FIRMWARE_PATH),
+        str(output_path),
         "-v",
         "-rst",
     ]
@@ -318,7 +337,7 @@ def parse_device_csv(device_csv: str) -> dict[str, str]:
     return result
 
 
-def validate_device_result(spec: RunSpec, device_result: dict[str, str]) -> None:
+def validate_device_result(spec: RunSpec, device_result: dict[str, str], matrix: dict[str, Any]) -> None:
     if device_result.get("SCENARIO") != spec.scenario:
         raise ValueError(
             f"Device reported scenario {device_result.get('SCENARIO')!r}, "
@@ -335,6 +354,15 @@ def validate_device_result(spec: RunSpec, device_result: dict[str, str]) -> None
                 f"Device reported TASKS={device_result.get('TASKS')!r}, "
                 f"expected {spec.task_count}."
             )
+    if spec.mode in INTEGRATED_MODES:
+        expected_scheduler = matrix.get("scheduler_algorithm", "SCHED_ALGO_SUPERLOOP").removeprefix("SCHED_ALGO_")
+        expected_chunk = int(matrix.get("edf_chunk_us", 1000)) if expected_scheduler == "CHUNKED_EDF" else 0
+        if device_result.get("SCHED") != expected_scheduler or device_result.get("CHUNK_US") != str(expected_chunk):
+            raise ValueError("Device scheduler/chunk does not match requested configuration")
+        if device_result.get("REQUESTED_WINDOW_US") != str(spec.window_us):
+            raise ValueError("Device requested window does not match configuration")
+        if device_result.get("REAL_TASKS") != "0":
+            raise ValueError("Synthetic campaign must have physical sensors disabled")
     if spec.mode in INTEGRATED_MODES and device_result.get("SYNTH_TASKS") != str(spec.task_count):
         raise ValueError(
             f"Device reported SYNTH_TASKS={device_result.get('SYNTH_TASKS')!r}, "
@@ -377,6 +405,34 @@ def validate_paths(arguments: argparse.Namespace) -> None:
         raise SystemExit(f"Configuration header not found: {CONFIG_HEADER}")
 
 
+def source_fingerprint() -> str:
+    digest = hashlib.sha256()
+    paths = list((FIRMWARE_ROOT / "Core").rglob("*.c")) + list((FIRMWARE_ROOT / "Core").rglob("*.h"))
+    paths += list((FIRMWARE_ROOT / "Drivers").rglob("*.c")) + list((FIRMWARE_ROOT / "Drivers").rglob("*.h"))
+    paths += list(FIRMWARE_ROOT.glob("*.ld")) + list((FIRMWARE_ROOT / "Core").rglob("*.s"))
+    paths += [FIRMWARE_ROOT / ".cproject", Path(__file__)]
+    for path in sorted(paths):
+        if path == CONFIG_HEADER:
+            continue
+        digest.update(str(path.relative_to(REPOSITORY_ROOT)).replace("\\", "/").encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def prepare_campaign(output_dir: Path, matrix: dict[str, Any], resume: bool) -> None:
+    manifest = {"schema": 1, "matrix": matrix, "source_sha256": source_fingerprint()}
+    manifest_path = output_dir / "manifest.json"
+    if output_dir.exists() and any(output_dir.iterdir()):
+        if not resume:
+            raise ValueError("Output directory is not empty; use a new directory or --resume")
+        if not manifest_path.exists() or json.loads(manifest_path.read_text(encoding="utf-8")) != manifest:
+            raise ValueError("Cannot resume: matrix/source mismatch or missing manifest; use a new output directory")
+        return
+    output_dir.mkdir(parents=True, exist_ok=True)
+    atomic_write(manifest_path, json.dumps(manifest, indent=2) + "\n")
+    atomic_write(output_dir / "matrix.json", json.dumps(matrix, indent=2) + "\n")
+
+
 def parse_arguments() -> argparse.Namespace:
     default_matrix = Path(__file__).with_name("matrix.default.json")
     parser = argparse.ArgumentParser(description=__doc__)
@@ -413,7 +469,7 @@ def main() -> int:
     # Eclipse refuses to import a project that contains its own workspace.
     # The default output directory lives under the repository, so the CubeIDE
     # workspace must be created elsewhere.
-    workspace = Path(tempfile.mkdtemp(prefix="stm32-experiment-runner-"))
+    workspace = None
     summary_path = output_dir / "summary.csv"
     task_summary_path = output_dir / "task_summary.csv"
 
@@ -424,10 +480,10 @@ def main() -> int:
         return 0
 
     validate_paths(arguments)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    prepare_campaign(output_dir, matrix, arguments.resume)
     raw_dir.mkdir(exist_ok=True)
     build_dir.mkdir(exist_ok=True)
-    atomic_write(output_dir / "matrix.json", json.dumps(matrix, indent=2) + "\n")
+    workspace = Path(tempfile.mkdtemp(prefix="stm32-experiment-runner-"))
 
     completed = completed_run_keys(summary_path) if arguments.resume else set()
     original_config = CONFIG_HEADER.read_text(encoding="utf-8")
@@ -436,6 +492,7 @@ def main() -> int:
     build_configuration = matrix.get("build_configuration", "Debug")
     frequency_khz = int(matrix.get("stlink_frequency_khz", 4000))
 
+    failures = 0
     try:
         for index, spec in enumerate(specs, start=1):
             if spec.run_key in completed:
@@ -456,7 +513,7 @@ def main() -> int:
             print(f"[{index}/{len(specs)}] Running {spec.run_key}")
             try:
                 atomic_write(CONFIG_HEADER, render_config(spec, matrix))
-                build_firmware(
+                output_path = build_firmware(
                     arguments.headless_builder,
                     workspace,
                     build_configuration,
@@ -474,6 +531,7 @@ def main() -> int:
                         arguments.programmer,
                         frequency_khz,
                         build_dir / f"{spec.run_key}.flash.log",
+                        output_path,
                     )
                     deadline = time.monotonic() + spec.window_us / 1_000_000 + grace_seconds
                     with raw_log_path.open("wb") as raw_log:
@@ -509,8 +567,9 @@ def main() -> int:
                         f"{spec.task_count}."
                     )
                 device_result = parse_device_csv(device_csv)
-                validate_device_result(spec, device_result)
+                validate_device_result(spec, device_result, matrix)
                 row.update(device_result)
+                row["DEVICE_WINDOW_TARGET_US"] = device_result.get("REQUESTED_WINDOW_US", "")
                 row["device_csv"] = device_csv
                 if spec.mode in INTEGRATED_MODES:
                     for task_csv in task_csv_lines:
@@ -536,6 +595,7 @@ def main() -> int:
                         )
                 row["status"] = "ok"
             except Exception as error:  # Record failures and continue with the matrix.
+                failures += 1
                 row["error"] = str(error)
                 print(f"  FAILED: {error}", file=sys.stderr)
             finally:
@@ -543,9 +603,10 @@ def main() -> int:
                 append_summary(summary_path, row)
     finally:
         atomic_write(CONFIG_HEADER, original_config)
+        shutil.rmtree(workspace, ignore_errors=True)
 
-    print(f"Finished. Results: {output_dir}")
-    return 0
+    print(f"Finished. Failures: {failures}. Results: {output_dir}")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

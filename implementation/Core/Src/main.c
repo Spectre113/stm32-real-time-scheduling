@@ -272,7 +272,10 @@ static void Reset_Profiling_Stats(void)
 /* App-level adapter: binds module statistics to this firmware's task set and UART. */
 static void Print_Profiling_Summary(void)
 {
-  char msg[384];
+  char msg[512];
+  /* Snapshot before UART output; finish the current Superloop iteration. */
+  uint64_t measured_window_us = scheduler_now_us() - g_profile_start_us;
+  if (measured_window_us == 0ULL) measured_window_us = 1ULL;
 
   uint64_t tau1_avg_exec = 0;
   uint64_t tau2_avg_exec = 0;
@@ -363,14 +366,14 @@ static void Print_Profiling_Summary(void)
   {
     sched_avg_cycles = g_scheduler_metrics.total_cycles / g_scheduler_metrics.count;
     sched_total_us = g_scheduler_metrics.total_cycles / cycles_per_us;
-    sched_overhead_x10000 = (sched_total_us * 1000000ULL) / PROFILE_WINDOW_US;
+    sched_overhead_x10000 = (sched_total_us * 1000000ULL) / measured_window_us;
   }
 
   if (g_polling_metrics.count > 0U)
   {
     poll_avg_cycles = g_polling_metrics.total_cycles / g_polling_metrics.count;
     poll_total_us = g_polling_metrics.total_cycles / cycles_per_us;
-    poll_overhead_x10000 = (poll_total_us * 1000000ULL) / PROFILE_WINDOW_US;
+    poll_overhead_x10000 = (poll_total_us * 1000000ULL) / measured_window_us;
   }
 
   task_exec_total_us = 0;
@@ -399,7 +402,7 @@ static void Print_Profiling_Summary(void)
 	  task_exec_total_us += tau_control.total_exec_us;
 	#endif
 
-  task_exec_percent_x10000 = (task_exec_total_us * 1000000ULL) / PROFILE_WINDOW_US;
+  task_exec_percent_x10000 = (task_exec_total_us * 1000000ULL) / measured_window_us;
 
   /*
    * measured_busy_us includes:
@@ -411,17 +414,17 @@ static void Print_Profiling_Summary(void)
    */
   measured_busy_us = task_exec_total_us + poll_total_us;
 
-  if (measured_busy_us < PROFILE_WINDOW_US)
+  if (measured_busy_us < measured_window_us)
   {
-    logical_idle_us = PROFILE_WINDOW_US - measured_busy_us;
+    logical_idle_us = measured_window_us - measured_busy_us;
   }
   else
   {
     logical_idle_us = 0;
   }
 
-  logical_idle_percent_x10000 = (logical_idle_us * 1000000ULL) / PROFILE_WINDOW_US;
-  measured_busy_percent_x10000 = (measured_busy_us * 1000000ULL) / PROFILE_WINDOW_US;
+  logical_idle_percent_x10000 = (logical_idle_us * 1000000ULL) / measured_window_us;
+  measured_busy_percent_x10000 = (measured_busy_us * 1000000ULL) / measured_window_us;
 
   snprintf(msg, sizeof(msg),
            "\r\n=== PROFILING SUMMARY %lu s ===\r\n",
@@ -439,12 +442,12 @@ static void Print_Profiling_Summary(void)
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
-           "theoretical utilization: %lu %%\r\n",
+           "scenario target utilization: %lu %%\r\n",
            (unsigned long)WORKLOAD_UTILIZATION_PERCENT);
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
-           "theoretical utilization exact: %lu.%02lu %%\r\n",
+           "enabled synthetic utilization (excludes sensors): %lu.%02lu %%\r\n",
            (unsigned long)(UTIL_X10000 / 100ULL),
            (unsigned long)(UTIL_X10000 % 100ULL));
   uart_print(msg);
@@ -782,12 +785,15 @@ static void Print_Profiling_Summary(void)
   /* ProfileSamples_Print(); */
 
   snprintf(msg, sizeof(msg),
-           "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
+           "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,REQUESTED_WINDOW_US=%lu,SYNTH_U_X10000=%lu,REAL_TASKS=%u,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
            SCHED_ALGO_NAME,
            WORKLOAD_SCENARIO_NAME,
            (unsigned long)WORKLOAD_UTILIZATION_PERCENT,
+           (unsigned long)measured_window_us,
            (unsigned long)PROFILE_WINDOW_US,
-           (unsigned int)INTEGRATED_SYNTH_TASK_COUNT,
+           (unsigned long)UTIL_X10000,
+           (unsigned int)(ENABLE_REAL_TAU1 + ENABLE_REAL_TAU2),
+           (unsigned int)ACTIVE_SYNTH_TASK_COUNT,
            (unsigned long)SCHED_CSV_CHUNK_US,
            (unsigned long)g_scheduler_metrics.count,
            (unsigned long)(sched_overhead_x10000 / 10000),
