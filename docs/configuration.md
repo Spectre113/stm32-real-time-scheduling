@@ -4,6 +4,8 @@
 
 Edit [`app_config.h`](../implementation/Core/Inc/app_config.h), then rebuild and flash. [`experiment_config.h`](../implementation/Core/Inc/experiment_config.h) is used only for temporary automation-runner overrides and normally remains unchanged.
 
+The [firmware source map](../implementation/Core/README.md) explains the role of each source module and the CubeMX-safe editing boundary.
+
 All time values are microseconds and use the `ULL` suffix. For comparable measurements, use the same scenario and measurement window in every compared run.
 
 ## Main parameters

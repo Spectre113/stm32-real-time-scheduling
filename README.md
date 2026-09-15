@@ -40,6 +40,8 @@ The manual switches are grouped in [`app_config.h`](implementation/Core/Inc/app_
 
 Use the [configuration reference](docs/configuration.md) to select a workload, measurement window, scheduler, task count, or profiling mode. It also explains the CSV output and what every macro controls.
 
+The [firmware source map](implementation/Core/README.md) shows where the configuration, sensors, scheduling, profiling, and CubeMX-managed code live.
+
 The two scheduling paths differ in an important way:
 
 - In Superloop, HC-SR04 and DHT11 use blocking baseline transactions.
@@ -68,7 +70,7 @@ See the [automation guide](tools/experiment_runner/README.md) for setup, matrice
 
 | Path | Contents |
 | --- | --- |
-| [`implementation/`](implementation/) | Self-contained STM32CubeIDE implementation: application code, HAL/CMSIS, CubeMX configuration, IDE metadata, and local build output. |
+| [`implementation/`](implementation/) | Self-contained STM32CubeIDE implementation; see its [firmware source map](implementation/Core/README.md) for the application-module layout. |
 | [`docs/`](docs/) | Concise technical documentation and links to maintained online materials. |
 | [`thesis/`](thesis/) | LaTeX sources, figures, and the generated PDF of the thesis proposal. |
 | [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation. |
