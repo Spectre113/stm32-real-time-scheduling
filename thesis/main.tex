@@ -4,6 +4,8 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{float}
 \usepackage{easy-todo}
+\usepackage{tabularx}
+\usepackage{array}
 
 \begin{document}
 
@@ -17,78 +19,213 @@
     Innopolis, Russia \\
     v.toporkov@innopolis.university
   }
+  \and
+  \IEEEauthorblockN{Artem Burmyakov}
+  \IEEEauthorblockA{
+    \textit{Institute of Information Security} \\
+    \textit{Innopolis University} \\
+    Innopolis, Russia \\
+    a.burmyakov@innopolis.ru
+  }
 }
 \maketitle
-\listoftodos
 
 \section{Introduction}
-  \subsection{Contribution}
-    We propose the following contribution:
-    \begin{itemize}
-      \item Experimental evaluation and comparison of Super Loop and Earliest Deadline First on STM32.
-    \end{itemize}
+\subsection{Contribution}
+We propose the following contribution:
+\begin{itemize}
+  \item Experimental evaluation and comparison of Super Loop and Earliest Deadline First on STM32.
+\end{itemize}
 
 \section{Background on STM32}
-  A typical STM32 system consists of two components:
-  \begin{enumerate}
-    \item Hardware - STM32 microcontroller (uniprocessor) and sensors.
-    \item Software - sensor logic and scheduler, with Super Loop used as the default baseline.
-  \end{enumerate}
+\subsection{Hardware}
+The experimental platform consists of a single-core STM32 microcontroller and external sensors connected through its hardware peripherals, as shown in Fig.~\ref{fig:stm32_hw}.
 
-  \subsection{STM32 hardware}
-    An example of the hardware system is shown in Fig.~\ref{fig:stm32_hw}.
-    \begin{figure}[htbp]
-      \centering
-      \includegraphics[width=0.8\columnwidth]{STM32_HW.jpg}
-      \caption{Hardware components of the STM32 system ($S_1$, $S_2$ - sensors).}
-      \label{fig:stm32_hw}
-    \end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\columnwidth]{STM32_HW.jpg}
+  \caption{STM32 hardware platform and connected sensors.}
+  \label{fig:stm32_hw}
+\end{figure}
 
-  \subsection{STM32 scheduling}
-    Super Loop does not account for job deadlines, baseline profiling shows deadline misses and skipped releases under different workload configurations, as shown in Fig.~\ref{fig:superloop_baseline}.
+The hardware components used in the experiments\\ are summarized in Table~\ref{tab:hardware}.
 
-    Earliest Deadline First (EDF) as a possible solution accounts for job deadlines, but its performance on STM32 requires experimental evaluation.
+\begin{table}[H]
+  \centering
+  \caption{Experimental hardware platform.}
+  \label{tab:hardware}
 
-    The goal is to evaluate schedulability on STM32, identify its main bottlenecks, and improve the scheduling behavior.
+  \small
+  \renewcommand{\arraystretch}{1.15}
+  \setlength{\tabcolsep}{4pt}
 
-    This leads to several research ideas:
-    \begin{enumerate}
-      \item Compare EDF and Super Loop scheduling under the same task set
-        (\textbf{key metrics:} deadline-miss ratio, skipped-release ratio, response time).
-      \item Improve EDF behavior under high CPU utilization using feedback control
-        (\textbf{key metrics:} deadline-miss ratio, skipped-release ratio, response time, CPU utilization).
-      \item Minimize unnecessary context switches in EDF
-        (\textbf{key metric:} number of preemptions).
-    \end{enumerate}
+  \begin{tabularx}{\columnwidth}{
+    l
+    >{\centering\arraybackslash}X
+    >{\centering\arraybackslash}X}
+    \hline
+    \textbf{Component} &
+    \textbf{Details} &
+    \textbf{Purpose} \\
+    \hline
 
-\section{Background on Scheduling}
-  \subsection{Superloop Scheduler: Key Principles}
-    \begin{figure*}[!t]
-      \centering
-      \includegraphics[width=0.85\textwidth]{SuperLoop ex.png}
+    STM32F767 &
+    Cortex-M7, TODO MHz &
+    Scheduling and task execution \\
 
-      \vspace{0.5em}
+    Sensor 1 &
+    TODO &
+    TODO \\
 
-      \includegraphics[width=0.85\textwidth]{SuperLoop table.png}
-      \caption{Super Loop execution scenario and corresponding scheduling state.}
-      \label{fig:superloop_example}
-    \end{figure*}
+    Sensor 2 &
+    TODO &
+    TODO \\
 
-  \subsection{EDF}
-    ToDo
+    Sensor 3 &
+    TODO &
+    TODO \\
 
-  \subsection{Brief Comparison}
-    ToDo (Table)
+    Sensor 4 &
+    TODO &
+    TODO \\
+
+    \hline
+  \end{tabularx}
+\end{table}
+
+\subsection{Super Loop Scheduler}
+
+Let us first consider an example of a Super Loop schedule for two
+periodic tasks with implicit deadlines ($D_i = T_i$).
+
+\begin{table}[H]
+  \centering
+  \caption{Task set used in the Super Loop example.}
+  \label{tab:superloop_tasks}
+  \begin{tabular}{c|ccc}
+    \hline
+    \textbf{Task} & $C_i$ & $T_i$ & $D_i$ \\
+    \hline
+    $\tau_1$ & 20 & 50 & 50 \\
+    $\tau_2$ & 10 & 20 & 20 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Here, $C_i$, $T_i$, and $D_i$ denote execution time, period, and relative deadline respectively.
+
+\begin{figure}[H]
+  \centering
+  \hspace*{-0.08\columnwidth}
+  \includegraphics[width=1.25\columnwidth]{SuperLoop ex.png}
+  \caption{Super Loop execution scenario for the task set in Table~\ref{tab:superloop_tasks}.}
+  \label{fig:superloop_schedule}
+\end{figure}
+
+Super Loop checks tasks sequentially in a fixed order, while each selected job executes to completion before the next task is checked.
+
+The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
+
+A deadline miss is detected when $t^{cur} > R_i^k + D_i$, while a release is skipped when
+$t^{cur} > t_i^{next}$.
+
+\begin{table}[H]
+  \centering
+  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}.}
+  \label{tab:superloop_state}
+
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{3pt}
+
+  \begin{tabularx}{\columnwidth}{
+    c c c
+    >{\centering\arraybackslash}X
+    >{\centering\arraybackslash}X}
+    \hline
+    $t^{cur}$ &
+    $t_1^{next}$ &
+    $t_2^{next}$ &
+    Deadline miss check &
+    Release skip check \\
+    \hline
+
+    0 & 0 & 0 &
+    -- &
+    -- \\
+
+    20 & 50 & 0 &
+    $20 < R_1^1 + 50$ &
+    $20 < R_2^2$ \\
+
+    30 & 50 & 40 &
+    \textbf{$30 > R_2^1 + 20$} &
+    \begin{tabular}{c}
+      \textbf{$30 > R_2^2$} \\
+      $30 < R_2^3$
+    \end{tabular} \\
+
+    40 & 50 & 40 &
+    -- &
+    -- \\
+
+    50 & 50 & 60 &
+    $50 < R_2^3 + 20$ &
+    $50 < R_2^4$ \\
+
+    \hline
+  \end{tabularx}
+\end{table}
+
+In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$, delaying $J_2^1$ beyond its deadline. At $t=20$, $\tau_2$ reaches its next
+scheduled release time while $J_2^1$ is still pending; therefore, this release is skipped and no $J_2^2$ is created.
+
+\section{Background on EDF Real-Time Scheduling}
+Super Loop is deadline-unaware: jobs are selected according to a fixed loop order
+rather than their deadlines. As shown in Fig.~\ref{fig:superloop_schedule}, this may delay jobs beyond their deadlines and cause skipped releases.
+
+\begin{table}[H]
+  \centering
+  \caption{Super Loop and EDF scheduling principles.}
+  \label{tab:sl_edf_comparison}
+
+  \small
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{lcc}
+    \hline
+    \textbf{Property} & \textbf{Super Loop} & \textbf{EDF} \\
+    \hline
+    Job selection & Fixed loop order & Earliest deadline \\
+    Deadline-aware & No & Yes \\
+    Preemption & No & Yes \\
+    \hline
+  \end{tabular}
+\end{table}
+
+EDF dynamically selects the ready job with the earliest absolute deadline.
+For a job $J_i^k$ released at $R_i^k$, its absolute deadline is
+
+\[d_i^k = R_i^k + D_i\]
+
+If a newly released job has an earlier deadline than the running job,
+the running job is preempted.
+
+For the same task set as in Section II-B, the resulting EDF schedule is shown in Fig.~\ref{fig:edf_schedule}. Observe that, unlike Super Loop, EDF:
+\begin{itemize}
+  \item selects the ready job with the earliest absolute deadline;
+  \item preempts the running job when a job with an earlier deadline is released;
+  \item avoids the deadline miss observed under Super Loop for the considered task set.
+\end{itemize}
 
 \section{Schedulers Implementation for STM32}
-  ToDo (code?)
+ToDo (code?)
 
 \section{Performance Evaluation}
-  \begin{figure}[H]
-    \centering
-    \includegraphics[width=\columnwidth]{SuperLoop.png}
-    \caption{Super Loop deadline-miss and skipped-release ratios for a specific task under different CPU utilization ($U$) levels and task-set sizes.}
-    \label{fig:superloop_baseline}
-  \end{figure}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\columnwidth]{SuperLoop.png}
+  \caption{Super Loop deadline-miss and skipped-release ratios for a specific task under different CPU utilization ($U$) levels and task-set sizes.}
+  \label{fig:superloop_baseline}
+\end{figure}
 
 \end{document}
