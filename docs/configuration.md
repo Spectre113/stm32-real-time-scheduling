@@ -2,7 +2,7 @@
 
 [Русская версия](configuration.ru.md)
 
-Edit the documented block at the top of [`implementation/Core/Src/main.c`](../implementation/Core/Src/main.c), then rebuild and flash. [`implementation/Core/Inc/experiment_config.h`](../implementation/Core/Inc/experiment_config.h) is used only for temporary automation-runner overrides and normally remains unchanged.
+Edit [`app_config.h`](../implementation/Core/Inc/app_config.h), then rebuild and flash. [`experiment_config.h`](../implementation/Core/Inc/experiment_config.h) is used only for temporary automation-runner overrides and normally remains unchanged.
 
 All time values are microseconds and use the `ULL` suffix. For comparable measurements, use the same scenario and measurement window in every compared run.
 

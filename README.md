@@ -30,7 +30,7 @@ If no COM port appears, reconnect the board and update the ST-LINK driver. The p
 
 ## Configure and run an experiment
 
-The manual switches are grouped at the top of [`implementation/Core/Src/main.c`](implementation/Core/Src/main.c). Rebuild and flash after changing them. The current defaults are `U50`, Superloop, integrated profiling, a 60-second window, and both physical sensors enabled.
+The manual switches are grouped in [`app_config.h`](implementation/Core/Inc/app_config.h). Rebuild and flash after changing them. The current defaults are `U50`, Superloop, integrated profiling, a 60-second window, and both physical sensors enabled.
 
 ```c
 #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U50
@@ -51,7 +51,7 @@ UART output is emitted only after a profiling window. Save the reported CSV line
 
 ## Automated experiment series
 
-[`tools/experiment_runner/`](tools/experiment_runner/) can build, flash, capture UART, and aggregate CSV rows for an entire experiment matrix. It preserves the manual switches in `main.c`, writes per-run logs plus `results/<timestamp>/summary.csv`, and keeps generated results outside Git.
+[`tools/experiment_runner/`](tools/experiment_runner/) can build, flash, capture UART, and aggregate CSV rows for an entire experiment matrix. It preserves the manual switches in `app_config.h`, writes per-run logs plus `results/<timestamp>/summary.csv`, and keeps generated results outside Git.
 
 See the [automation guide](tools/experiment_runner/README.md) for setup, matrices, and commands.
 

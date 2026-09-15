@@ -14,425 +14,31 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <inttypes.h>
+#include "app_config.h"
+#include "workload_config.h"
+#include "app_uart.h"
+#include "cycle_metrics.h"
+#include "dht11.h"
+#include "edf_selector.h"
+#include "edf_executor.h"
+#include "debug_status.h"
+#include "hcsr04.h"
+#include "isolated_profile.h"
+#include "minimal_superloop_config.h"
+#include "minimal_superloop_profile.h"
+#include "platform_time.h"
+#include "profile_samples.h"
+#include "scheduler_release.h"
+#include "superloop_scalability_profile.h"
+#include "superloop_checks_profile.h"
+#include "task_stats.h"
+#include "task_init.h"
+#include "task_reporting.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-/*
- * ============================================================================
- * Manual experiment configuration - edit the switches in this block.
- *
- * The automation runner temporarily supplies overrides through
- * Core/Inc/experiment_config.h. For a normal CubeIDE build this file is empty,
- * so the values below are used. Rebuild and flash after changing a switch.
- * ============================================================================
- */
-
-/* Scheduler used by EXPERIMENT_INTEGRATED. */
-#define SCHED_ALGO_SUPERLOOP    0
-#define SCHED_ALGO_CHUNKED_EDF  1
-
-/* Workload scenarios: the U number is the target total synthetic utilization. */
-#define WORKLOAD_SCENARIO_U50    0
-#define WORKLOAD_SCENARIO_U65    1
-#define WORKLOAD_SCENARIO_U80    2
-#define WORKLOAD_SCENARIO_U90    3
-#define WORKLOAD_SCENARIO_U95    4
-#define WORKLOAD_SCENARIO_U100   5
-#define WORKLOAD_SCENARIO_U110   6
-#define WORKLOAD_SCENARIO_U75    7
-
-/* Choose one experiment mode below. */
-#define EXPERIMENT_INTEGRATED                    0  /* Full task and scheduler statistics. */
-#define EXPERIMENT_ISOLATED_TAU1                 1  /* Isolated first task. */
-#define EXPERIMENT_ISOLATED_TAU2                 2  /* Isolated second task. */
-#define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE     3  /* Clean two-task Superloop profile. */
-#define EXPERIMENT_SUPERLOOP_CHECKS_PROFILE      4  /* Readiness/release-check profile. */
-#define EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN   5  /* Clean 2/3/4-task Superloop profile. */
-#define EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS  6  /* 2/3/4-task checks profile. */
-
-/* Integrated scheduler idle policy. Profile modes always use busy polling. */
-#define SCHED_BUSY_POLLING   0
-#define SCHED_WFI_OPTIMIZED  1
-
-/* Autotest overrides are read before the manual defaults below. */
-#include "experiment_config.h"
-
-/* Primary choices for a manual CubeIDE build. Edit only the value in each define. */
-#ifndef WORKLOAD_SCENARIO
-  #define WORKLOAD_SCENARIO WORKLOAD_SCENARIO_U50
-#endif
-
-#ifndef SCHED_ALGO
-  #define SCHED_ALGO SCHED_ALGO_SUPERLOOP
-#endif
-
-#ifndef EXPERIMENT_MODE
-  #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
-#endif
-
-/* 2 = IMU + LiDAR; 3 = IMU + LiDAR + Camera (integrated mode only). */
-#ifndef INTEGRATED_SYNTH_TASK_COUNT
-  #define INTEGRATED_SYNTH_TASK_COUNT 2
-#endif
-
-/* Measurement windows, in microseconds. */
-#ifndef PROFILE_WINDOW_US
-  #define PROFILE_WINDOW_US 60000000ULL           /* Integrated profile: 60 s. */
-#endif
-
-#ifndef MINIMAL_PROFILE_WINDOW_US
-  #define MINIMAL_PROFILE_WINDOW_US 60000000ULL   /* Modes 3 and 4: 60 s. */
-#endif
-
-#ifndef SCALABILITY_PROFILE_WINDOW_US
-  #define SCALABILITY_PROFILE_WINDOW_US 60000000ULL /* Modes 5 and 6: 60 s. */
-#endif
-
-/* Modes 5 and 6 only: select 2, 3, or 4 synthetic tasks. */
-#ifndef SCALABILITY_TASK_COUNT
-  #define SCALABILITY_TASK_COUNT 2
-#endif
-
-/* Chunk size used only by SCHED_ALGO_CHUNKED_EDF. */
-#ifndef EDF_CHUNK_US
-  #define EDF_CHUNK_US 1000ULL
-#endif
-
-/* Real physical sensor tasks: HC-SR04 (tau1) and DHT11 (tau2). */
-#ifndef ENABLE_REAL_TAU1
-  #define ENABLE_REAL_TAU1 1  /* Set to 0 when HC-SR04 is not connected. */
-#endif
-
-#ifndef ENABLE_REAL_TAU2
-  #define ENABLE_REAL_TAU2 1  /* Set to 0 when DHT11 is not connected. */
-#endif
-
-/* Synthetic integrated tasks. Camera follows INTEGRATED_SYNTH_TASK_COUNT. */
-#ifndef ENABLE_SYNTH_IMU
-  #define ENABLE_SYNTH_IMU 0
-#endif
-
-#ifndef ENABLE_SYNTH_LIDAR
-  #define ENABLE_SYNTH_LIDAR 0
-#endif
-
-#ifndef ENABLE_SYNTH_CONTROL
-  #define ENABLE_SYNTH_CONTROL 0
-#endif
-
-/* UART debug output alters timing; use 0 for measurements. */
-#ifndef ENABLE_DEBUG_PRINT
-  #define ENABLE_DEBUG_PRINT 0
-#endif
-
-/* Full polling statistics are used by the integrated experiment. */
-#ifndef ENABLE_POLLING_PROFILE
-  #define ENABLE_POLLING_PROFILE 1
-#endif
-
-#ifndef SCHEDULER_MODE
-  #define SCHEDULER_MODE SCHED_BUSY_POLLING
-#endif
-
-/* Physical task pinout and periods. */
-#define HCSR04_TRIG_PORT GPIOB
-#define HCSR04_TRIG_PIN  GPIO_PIN_2
-#define HCSR04_ECHO_PORT GPIOC
-#define HCSR04_ECHO_PIN  GPIO_PIN_0
-#define HCSR04_TIMEOUT_US 30000
-
-#define DHT11_PORT GPIOA
-#define DHT11_PIN  GPIO_PIN_5
-
-#define TAU1_PERIOD_US 100000        // 100 ms, ultrasonic
-#define TAU2_PERIOD_US 2000000       // 2000 ms, DHT11
-#define TAU1_PERIOD_MS 100
-#define TAU2_PERIOD_MS 2000
-
-#if (INTEGRATED_SYNTH_TASK_COUNT < 2) || (INTEGRATED_SYNTH_TASK_COUNT > 3)
-#error "INTEGRATED_SYNTH_TASK_COUNT must be 2 or 3"
-#endif
-
-#if INTEGRATED_SYNTH_TASK_COUNT == 3
-  #define ENABLE_SYNTH_CAMERA 1
-#else
-  #define ENABLE_SYNTH_CAMERA 0
-#endif
-
-#define TAU_IMU_PERIOD_US    10000ULL   // T_I = 10 ms
-#define TAU_IMU_PERIOD_MS    10
-#define TAU_LIDAR_PERIOD_US    50000ULL // T_L = 50 ms
-#define TAU_LIDAR_PERIOD_MS    50
-#define TAU_CAMERA_PERIOD_US    200000ULL // T_C = 200 ms
-#define TAU_CAMERA_PERIOD_MS    200
-
-#if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
-  #define TAU_IMU_WORKLOAD_US     1667ULL
-  #define TAU_LIDAR_WORKLOAD_US   11111ULL
-  #define TAU_CAMERA_WORKLOAD_US  22222ULL
-  #define WORKLOAD_SCENARIO_NAME  "U50"
-  #define WORKLOAD_UTILIZATION_PERCENT 50U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
-  #define TAU_IMU_WORKLOAD_US     2167ULL
-  #define TAU_LIDAR_WORKLOAD_US   14444ULL
-  #define TAU_CAMERA_WORKLOAD_US  28889ULL
-  #define WORKLOAD_SCENARIO_NAME  "U65"
-  #define WORKLOAD_UTILIZATION_PERCENT 65U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U75
-  #define TAU_IMU_WORKLOAD_US     2500ULL
-  #define TAU_LIDAR_WORKLOAD_US   16667ULL
-  #define TAU_CAMERA_WORKLOAD_US  33332ULL
-  #define WORKLOAD_SCENARIO_NAME  "U75"
-  #define WORKLOAD_UTILIZATION_PERCENT 75U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U80
-  #define TAU_IMU_WORKLOAD_US     2667ULL
-  #define TAU_LIDAR_WORKLOAD_US   17778ULL
-  #define TAU_CAMERA_WORKLOAD_US  35556ULL
-  #define WORKLOAD_SCENARIO_NAME  "U80"
-  #define WORKLOAD_UTILIZATION_PERCENT 80U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
-  #define TAU_IMU_WORKLOAD_US     3000ULL
-  #define TAU_LIDAR_WORKLOAD_US   20000ULL
-  #define TAU_CAMERA_WORKLOAD_US  40000ULL
-  #define WORKLOAD_SCENARIO_NAME  "U90"
-  #define WORKLOAD_UTILIZATION_PERCENT 90U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U95
-  #define TAU_IMU_WORKLOAD_US     3167ULL
-  #define TAU_LIDAR_WORKLOAD_US   21111ULL
-  #define TAU_CAMERA_WORKLOAD_US  42222ULL
-  #define WORKLOAD_SCENARIO_NAME  "U95"
-  #define WORKLOAD_UTILIZATION_PERCENT 95U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U100
-  #define TAU_IMU_WORKLOAD_US     3333ULL
-  #define TAU_LIDAR_WORKLOAD_US   22222ULL
-  #define TAU_CAMERA_WORKLOAD_US  44444ULL
-  #define WORKLOAD_SCENARIO_NAME  "U100"
-  #define WORKLOAD_UTILIZATION_PERCENT 100U
-#elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U110
-  #define TAU_IMU_WORKLOAD_US     3667ULL
-  #define TAU_LIDAR_WORKLOAD_US   24444ULL
-  #define TAU_CAMERA_WORKLOAD_US  48889ULL
-  #define WORKLOAD_SCENARIO_NAME  "U110"
-  #define WORKLOAD_UTILIZATION_PERCENT 110U
-#else
-  #error "Unsupported WORKLOAD_SCENARIO"
-#endif
-
-#if (EXPERIMENT_MODE == EXPERIMENT_INTEGRATED) && \
-    (INTEGRATED_SYNTH_TASK_COUNT == 2)
-  /* Re-normalize the remaining IMU/LiDAR 3:4 workload split to the target U. */
-  #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 2143ULL
-    #define TAU_LIDAR_WORKLOAD_US 14285ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 2786ULL
-    #define TAU_LIDAR_WORKLOAD_US 18570ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U75
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 3214ULL
-    #define TAU_LIDAR_WORKLOAD_US 21430ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U80
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 3429ULL
-    #define TAU_LIDAR_WORKLOAD_US 22855ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 3857ULL
-    #define TAU_LIDAR_WORKLOAD_US 25715ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U95
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 4071ULL
-    #define TAU_LIDAR_WORKLOAD_US 27145ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U100
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 4286ULL
-    #define TAU_LIDAR_WORKLOAD_US 28570ULL
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U110
-    #undef TAU_IMU_WORKLOAD_US
-    #undef TAU_LIDAR_WORKLOAD_US
-    #define TAU_IMU_WORKLOAD_US 4714ULL
-    #define TAU_LIDAR_WORKLOAD_US 31430ULL
-  #endif
-#endif
-
-#define UTIL_X10000_BASE \
-  ((TAU_IMU_WORKLOAD_US * 10000ULL / TAU_IMU_PERIOD_US) + \
-   (TAU_LIDAR_WORKLOAD_US * 10000ULL / TAU_LIDAR_PERIOD_US))
-
-#if ENABLE_SYNTH_CAMERA
-  #define UTIL_X10000 \
-    (UTIL_X10000_BASE + \
-     (TAU_CAMERA_WORKLOAD_US * 10000ULL / TAU_CAMERA_PERIOD_US))
-#else
-  #define UTIL_X10000 UTIL_X10000_BASE
-#endif
-
-#define PROFILE_WINDOW_MS 10000UL
-
-#define DEBUG_PERIOD_US 1000000      // print every 1 second
-
-#define EXEC_HIST_BINS 10
-
-#if (SCHED_ALGO != SCHED_ALGO_SUPERLOOP) && \
-    (SCHED_ALGO != SCHED_ALGO_CHUNKED_EDF)
-#error "Unsupported scheduler algorithm"
-#endif
-
-#if EDF_CHUNK_US == 0ULL
-#error "EDF_CHUNK_US must be greater than zero"
-#endif
-
-#if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
-  #define SCHED_ALGO_NAME "CHUNKED_EDF"
-  #define SCHED_CSV_CHUNK_US EDF_CHUNK_US
-#else
-  #define SCHED_ALGO_NAME "SUPERLOOP"
-  #define SCHED_CSV_CHUNK_US 0ULL
-#endif
-
-#define MINIMAL_TAU1_PERIOD_US 10000ULL
-#define MINIMAL_TAU2_PERIOD_US 50000ULL
-
-#if (EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE)
-  /* Dedicated two-task workloads; the existing three-task values stay unchanged. */
-  #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U50
-    #define MINIMAL_TAU1_WORKLOAD_US 2500ULL
-    #define MINIMAL_TAU2_WORKLOAD_US 12500ULL
-    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U50"
-    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 50U
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
-    #define MINIMAL_TAU1_WORKLOAD_US 3250ULL
-    #define MINIMAL_TAU2_WORKLOAD_US 16250ULL
-    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U65"
-    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 65U
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U80
-    #define MINIMAL_TAU1_WORKLOAD_US 4000ULL
-    #define MINIMAL_TAU2_WORKLOAD_US 20000ULL
-    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U80"
-    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 80U
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
-    #define MINIMAL_TAU1_WORKLOAD_US 4500ULL
-    #define MINIMAL_TAU2_WORKLOAD_US 22500ULL
-    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U90"
-    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 90U
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U95
-    #define MINIMAL_TAU1_WORKLOAD_US 4750ULL
-    #define MINIMAL_TAU2_WORKLOAD_US 23750ULL
-    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U95"
-    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 95U
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U100
-    #define MINIMAL_TAU1_WORKLOAD_US 5000ULL
-    #define MINIMAL_TAU2_WORKLOAD_US 25000ULL
-    #define MINIMAL_WORKLOAD_SCENARIO_NAME "U100"
-    #define MINIMAL_WORKLOAD_UTILIZATION_PERCENT 100U
-  #else
-    #error "Minimal Superloop profile supports U50, U65, U80, U90, U95, and U100 only"
-  #endif
-#endif
-
-#define TAU1_MAX_SAMPLES 700
-#define TAU2_MAX_SAMPLES 50
-
-typedef struct
-{
-  const char *name;
-
-  uint64_t period_us;
-  uint64_t deadline_us;
-  uint64_t next_release_us;
-
-  uint32_t period_ms;
-  uint32_t deadline_ms;
-  uint32_t next_release_ms;
-
-  uint32_t run_count;
-
-  uint64_t total_exec_us;
-  uint64_t min_exec_us;
-  uint64_t max_exec_us;
-
-  uint64_t total_response_us;
-  uint64_t min_response_us;
-  uint64_t max_response_us;
-
-  uint32_t deadline_miss_count;
-  uint64_t max_lateness_us;
-
-  uint64_t skipped_release_count;
-  uint64_t total_timing_failures;
-
-  uint8_t job_active;
-  uint64_t active_release_us;
-  uint64_t remaining_exec_us;
-  uint64_t accumulated_exec_us;
-
-  uint32_t exec_hist[EXEC_HIST_BINS];
-} Task_t;
-
-typedef void (*TaskRunFn)(void);
-
-typedef enum
-{
-  SCHED_TASK_SYNTHETIC = 0,
-  SCHED_TASK_STAGED_HCSR04,
-  SCHED_TASK_STAGED_DHT11
-} SchedTaskKind_t;
-
-typedef struct
-{
-  Task_t *task;
-  TaskRunFn run;
-  uint64_t workload_us;
-  uint8_t enabled;
-  SchedTaskKind_t kind;
-} SchedTaskRef_t;
-
-typedef enum
-{
-  HCSR04_IDLE = 0,
-  HCSR04_TRIGGER,
-  HCSR04_WAIT_ECHO_RISE,
-  HCSR04_WAIT_ECHO_FALL,
-  HCSR04_COMPLETE,
-  HCSR04_ERROR
-} HCSR04_State_t;
-
-typedef enum
-{
-  DHT11_IDLE = 0,
-  DHT11_START_LOW,
-  DHT11_WAIT_START_LOW,
-  DHT11_READ_TRANSACTION,
-  DHT11_DONE,
-  DHT11_ERROR
-} DHT11_State_t;
-
-typedef enum
-{
-  DHT11_STEP_WAITING = 0,
-  DHT11_STEP_COMPLETE,
-  DHT11_STEP_ERROR
-} DHT11_StepResult_t;
-
-typedef struct
-{
-  DHT11_State_t state;
-  uint64_t wait_until_us;
-  int result;
-} DHT11_Context_t;
 
 /* USER CODE END PTD */
 
@@ -501,42 +107,11 @@ static uint8_t g_temp = 0;
 static uint8_t g_hum = 0;
 static int g_dht_res = -99;
 
-static uint32_t g_cycles_per_us = 1;
-
-#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
-/* ISR-shared HC-SR04 event data. 32-bit DWT cycle values are atomically read. */
-static volatile HCSR04_State_t g_hcsr04_state = HCSR04_IDLE;
-static volatile uint8_t g_hcsr04_rise_event = 0U;
-static volatile uint8_t g_hcsr04_fall_event = 0U;
-static volatile uint32_t g_hcsr04_echo_rise_cycles = 0U;
-static volatile uint32_t g_hcsr04_echo_fall_cycles = 0U;
-static volatile uint32_t g_hcsr04_timeout_cycles = 0U;
-static volatile uint32_t g_hcsr04_rise_timeout_cycles = 0U;
-static volatile uint8_t g_hcsr04_rise_late = 0U;
-#endif
-
-#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU2
-static DHT11_Context_t g_dht11_ctx;
-#endif
-
 static uint64_t g_profile_start_us = 0;
 static uint32_t g_profile_start_ms = 0;
 
-static uint64_t g_sched_total_cycles = 0;
-static uint32_t g_sched_min_cycles = 0;
-static uint32_t g_sched_max_cycles = 0;
-static uint32_t g_sched_count = 0;
-
-static uint64_t g_poll_total_cycles = 0;
-static uint32_t g_poll_min_cycles = 0;
-static uint32_t g_poll_max_cycles = 0;
-static uint32_t g_poll_count = 0;
-
-static uint32_t tau1_exec_samples[TAU1_MAX_SAMPLES];
-static uint32_t tau2_exec_samples[TAU2_MAX_SAMPLES];
-
-static uint32_t tau1_sample_count = 0;
-static uint32_t tau2_sample_count = 0;
+static CycleMetrics_t g_scheduler_metrics;
+static CycleMetrics_t g_polling_metrics;
 
 /* USER CODE END PV */
 
@@ -554,569 +129,11 @@ static void MX_TIM3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static void DWT_Init(void)
-{
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-
-  #if (__CORTEX_M == 7)
-  DWT->LAR = 0xC5ACCE55;
-  #endif
-
-  DWT->CYCCNT = 0;
-  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-}
-
-static inline uint64_t micros(void)
-{
-  static uint32_t last_cycles = 0;
-  static uint64_t high_cycles = 0;
-
-  uint32_t current_cycles = DWT->CYCCNT;
-
-  if (current_cycles < last_cycles)
-  {
-    high_cycles += (1ULL << 32);
-  }
-
-  last_cycles = current_cycles;
-
-  uint64_t total_cycles = high_cycles + current_cycles;
-
-  return total_cycles / g_cycles_per_us;
-}
-
-static inline uint64_t scheduler_now_us(void)
-{
-  return micros();
-}
-
-static void Task_AdvanceRelease(Task_t *task, uint64_t now_us)
-{
-  /*
-   * Current job has just been processed.
-   * Move to the next release.
-   */
-  task->next_release_us += task->period_us;
-
-  /*
-   * If the system is already past one or more future releases,
-   * those jobs were not executed. Count them as skipped releases.
-   */
-  while ((int64_t)(now_us - task->next_release_us) > 0)
-  {
-    task->skipped_release_count++;
-    task->total_timing_failures++;
-
-    task->next_release_us += task->period_us;
-  }
-
-  /*
-   * Keep millisecond field synchronized for printing/debug compatibility.
-   */
-  task->next_release_ms = (uint32_t)(task->next_release_us / 1000ULL);
-}
-
-static void delay_us(uint32_t us)
-{
-  uint64_t start = micros();
-  while ((micros() - start) < us);
-}
-
-static void Synthetic_Workload_us(uint64_t duration_us)
-{
-  uint64_t start = micros();
-
-  while ((micros() - start) < duration_us)
-  {
-    __NOP();
-  }
-}
-
-static void uart_print(char *text)
-{
-  HAL_UART_Transmit(&huart3, (uint8_t*)text, strlen(text), HAL_MAX_DELAY);
-}
-
-#if (EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS)
-static void uart_print_u64(uint64_t value)
-{
-  char digits[21];
-  uint32_t length = 0;
-
-  do
-  {
-    digits[length++] = (char)('0' + (value % 10ULL));
-    value /= 10ULL;
-  } while (value > 0ULL);
-
-  for (uint32_t i = 0; i < length / 2U; i++)
-  {
-    char digit = digits[i];
-    digits[i] = digits[length - 1U - i];
-    digits[length - 1U - i] = digit;
-  }
-
-  digits[length] = '\0';
-  uart_print(digits);
-}
-
-static void uart_print_percent_x10000(uint64_t value_us, uint64_t total_us)
-{
-  uint64_t percent_x10000 = (value_us * 1000000ULL) / total_us;
-  uint32_t fraction = (uint32_t)(percent_x10000 % 10000ULL);
-  char fraction_text[6];
-
-  uart_print_u64(percent_x10000 / 10000ULL);
-  fraction_text[0] = '.';
-  fraction_text[1] = (char)('0' + (fraction / 1000U));
-  fraction_text[2] = (char)('0' + ((fraction / 100U) % 10U));
-  fraction_text[3] = (char)('0' + ((fraction / 10U) % 10U));
-  fraction_text[4] = (char)('0' + (fraction % 10U));
-  fraction_text[5] = '\0';
-  uart_print(fraction_text);
-}
-
-static inline uint32_t Correct_DWT_Delta(uint32_t delta,
-                                         uint32_t measurement_overhead)
-{
-  return delta > measurement_overhead
-         ? delta - measurement_overhead : 0U;
-}
-#endif
-
-#if (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS)
-  #if (SCALABILITY_TASK_COUNT < 2) || (SCALABILITY_TASK_COUNT > 4)
-    #error "SCALABILITY_TASK_COUNT must be 2, 3, or 4"
-  #endif
-
-  #define SCALABILITY_TAU1_PERIOD_US 10000ULL
-  #define SCALABILITY_TAU2_PERIOD_US 20000ULL
-  #define SCALABILITY_TAU3_PERIOD_US 50000ULL
-  #define SCALABILITY_TAU4_PERIOD_US 100000ULL
-
-  #if WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U65
-    #define SCALABILITY_WORKLOAD_SCENARIO_NAME "U65"
-    #define SCALABILITY_WORKLOAD_UTILIZATION_PERCENT 65U
-    #if SCALABILITY_TASK_COUNT == 2
-      #define SCALABILITY_TAU1_WORKLOAD_US 3250ULL
-      #define SCALABILITY_TAU2_WORKLOAD_US 6500ULL
-    #elif SCALABILITY_TASK_COUNT == 3
-      /* Rounded equally, with a one-microsecond hyperperiod adjustment. */
-      #define SCALABILITY_TAU1_WORKLOAD_US 2167ULL
-      #define SCALABILITY_TAU2_WORKLOAD_US 4334ULL
-      #define SCALABILITY_TAU3_WORKLOAD_US 10830ULL
-    #else
-      #define SCALABILITY_TAU1_WORKLOAD_US 1625ULL
-      #define SCALABILITY_TAU2_WORKLOAD_US 3250ULL
-      #define SCALABILITY_TAU3_WORKLOAD_US 8125ULL
-      #define SCALABILITY_TAU4_WORKLOAD_US 16250ULL
-    #endif
-  #elif WORKLOAD_SCENARIO == WORKLOAD_SCENARIO_U90
-    #define SCALABILITY_WORKLOAD_SCENARIO_NAME "U90"
-    #define SCALABILITY_WORKLOAD_UTILIZATION_PERCENT 90U
-    #if SCALABILITY_TASK_COUNT == 2
-      #define SCALABILITY_TAU1_WORKLOAD_US 4500ULL
-      #define SCALABILITY_TAU2_WORKLOAD_US 9000ULL
-    #elif SCALABILITY_TASK_COUNT == 3
-      #define SCALABILITY_TAU1_WORKLOAD_US 3000ULL
-      #define SCALABILITY_TAU2_WORKLOAD_US 6000ULL
-      #define SCALABILITY_TAU3_WORKLOAD_US 15000ULL
-    #else
-      #define SCALABILITY_TAU1_WORKLOAD_US 2250ULL
-      #define SCALABILITY_TAU2_WORKLOAD_US 4500ULL
-      #define SCALABILITY_TAU3_WORKLOAD_US 11250ULL
-      #define SCALABILITY_TAU4_WORKLOAD_US 22500ULL
-    #endif
-  #else
-    #error "Superloop scalability profiles support U65 and U90 only"
-  #endif
-#endif
-
-/* Blocking baseline retained for Superloop. */
-static int HCSR04_Read_cm_Blocking(void)
-{
-	uint64_t start_time;
-	uint64_t echo_start;
-	uint64_t echo_end;
-	uint64_t duration_us;
-
-  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_RESET);
-  delay_us(2);
-
-  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_SET);
-  delay_us(10);
-  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_RESET);
-
-  start_time = micros();
-
-  while (HAL_GPIO_ReadPin(HCSR04_ECHO_PORT, HCSR04_ECHO_PIN) == GPIO_PIN_RESET)
-  {
-    if ((micros() - start_time) > HCSR04_TIMEOUT_US)
-    {
-      return -1;
-    }
-  }
-
-  echo_start = micros();
-
-  while (HAL_GPIO_ReadPin(HCSR04_ECHO_PORT, HCSR04_ECHO_PIN) == GPIO_PIN_SET)
-  {
-    if ((micros() - echo_start) > HCSR04_TIMEOUT_US)
-    {
-      return -2;
-    }
-  }
-
-  echo_end = micros();
-
-  duration_us = echo_end - echo_start;
-
-  return duration_us / 58;
-}
 
 #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
-static void HCSR04_Async_Reset(void)
-{
-  uint32_t primask = __get_PRIMASK();
-
-  __disable_irq();
-  g_hcsr04_state = HCSR04_IDLE;
-  g_hcsr04_rise_event = 0U;
-  g_hcsr04_fall_event = 0U;
-  __set_PRIMASK(primask);
-
-  g_hcsr04_timeout_cycles = 0U;
-  g_hcsr04_rise_timeout_cycles = 0U;
-  g_hcsr04_rise_late = 0U;
-}
-
-/* The short 2 us + 10 us trigger pulse is the only synchronous sensor stage. */
-static void HCSR04_Async_Start(void)
-{
-  uint32_t primask;
-
-  g_hcsr04_state = HCSR04_TRIGGER;
-  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_RESET);
-  delay_us(2);
-
-  /* Arm EXTI before the rising trigger edge so a short echo pulse is not lost. */
-  primask = __get_PRIMASK();
-  __disable_irq();
-  g_hcsr04_rise_event = 0U;
-  g_hcsr04_fall_event = 0U;
-  g_hcsr04_rise_late = 0U;
-  g_hcsr04_rise_timeout_cycles = DWT->CYCCNT +
-      ((uint32_t)HCSR04_TIMEOUT_US * g_cycles_per_us);
-  g_hcsr04_timeout_cycles = g_hcsr04_rise_timeout_cycles;
-  g_hcsr04_state = HCSR04_WAIT_ECHO_RISE;
-  __set_PRIMASK(primask);
-
-  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_SET);
-  delay_us(10);
-  HAL_GPIO_WritePin(HCSR04_TRIG_PORT, HCSR04_TRIG_PIN, GPIO_PIN_RESET);
-}
-
-static uint8_t HCSR04_Async_IsRunnable(uint64_t now_us)
-{
-  HCSR04_State_t state = g_hcsr04_state;
-  uint32_t current_cycles;
-
-  (void)now_us;
-
-  if ((state == HCSR04_COMPLETE) && (g_hcsr04_fall_event != 0U))
-  {
-    return 1U;
-  }
-
-  if ((state == HCSR04_WAIT_ECHO_RISE) ||
-      (state == HCSR04_WAIT_ECHO_FALL))
-  {
-    current_cycles = DWT->CYCCNT;
-    return ((int32_t)(current_cycles - g_hcsr04_timeout_cycles) >= 0);
-  }
-
-  return 0U;
-}
-
-static uint8_t HCSR04_Async_Finalize(int *distance_cm)
-{
-  uint32_t primask = __get_PRIMASK();
-  uint32_t rise_cycles;
-  uint32_t fall_cycles;
-  uint32_t duration_cycles;
-  uint8_t rise_late;
-
-  __disable_irq();
-  if ((g_hcsr04_state != HCSR04_COMPLETE) ||
-      (g_hcsr04_fall_event == 0U))
-  {
-    __set_PRIMASK(primask);
-    return 0U;
-  }
-
-  rise_cycles = g_hcsr04_echo_rise_cycles;
-  fall_cycles = g_hcsr04_echo_fall_cycles;
-  rise_late = g_hcsr04_rise_late;
-  g_hcsr04_state = HCSR04_IDLE;
-  g_hcsr04_rise_event = 0U;
-  g_hcsr04_fall_event = 0U;
-  g_hcsr04_rise_late = 0U;
-  __set_PRIMASK(primask);
-
-  /* Unsigned DWT subtraction is wrap-safe for an HC-SR04 echo pulse. */
-  duration_cycles = fall_cycles - rise_cycles;
-  *distance_cm = (rise_late != 0U)
-      ? -1 : (int)((duration_cycles / g_cycles_per_us) / 58U);
-  g_hcsr04_timeout_cycles = 0U;
-  g_hcsr04_rise_timeout_cycles = 0U;
-
-  return 1U;
-}
-
-static uint8_t HCSR04_Async_Timeout(int *distance_cm)
-{
-  uint32_t primask = __get_PRIMASK();
-  uint32_t current_cycles;
-  HCSR04_State_t state;
-  int sensor_error;
-
-  __disable_irq();
-  state = g_hcsr04_state;
-
-  if (((state != HCSR04_WAIT_ECHO_RISE) &&
-       (state != HCSR04_WAIT_ECHO_FALL)))
-  {
-    __set_PRIMASK(primask);
-    return 0U;
-  }
-
-  current_cycles = DWT->CYCCNT;
-  if ((int32_t)(current_cycles - g_hcsr04_timeout_cycles) < 0)
-  {
-    __set_PRIMASK(primask);
-    return 0U;
-  }
-
-  sensor_error = (state == HCSR04_WAIT_ECHO_RISE) ? -1 : -2;
-  if (g_hcsr04_rise_late != 0U)
-  {
-    sensor_error = -1;
-  }
-
-  *distance_cm = sensor_error;
-  g_hcsr04_state = HCSR04_ERROR;
-  g_hcsr04_rise_event = 0U;
-  g_hcsr04_fall_event = 0U;
-  g_hcsr04_rise_late = 0U;
-  g_hcsr04_state = HCSR04_IDLE;
-  __set_PRIMASK(primask);
-
-  g_hcsr04_timeout_cycles = 0U;
-  g_hcsr04_rise_timeout_cycles = 0U;
-  return 1U;
-}
-
-/* EXTI ISR callback: capture only the edge and state/event flags. */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  HCSR04_State_t state;
-  uint32_t cycles;
-  GPIO_PinState level;
-
-  if (GPIO_Pin != HCSR04_ECHO_PIN)
-  {
-    return;
-  }
-
-  cycles = DWT->CYCCNT;
-  level = HAL_GPIO_ReadPin(HCSR04_ECHO_PORT, HCSR04_ECHO_PIN);
-  state = g_hcsr04_state;
-
-  if ((state == HCSR04_WAIT_ECHO_RISE) && (level == GPIO_PIN_SET))
-  {
-    g_hcsr04_echo_rise_cycles = cycles;
-    g_hcsr04_rise_event = 1U;
-    g_hcsr04_rise_late =
-        ((int32_t)(cycles - g_hcsr04_rise_timeout_cycles) > 0) ? 1U : 0U;
-    g_hcsr04_timeout_cycles = cycles +
-        ((uint32_t)HCSR04_TIMEOUT_US * g_cycles_per_us);
-    g_hcsr04_state = HCSR04_WAIT_ECHO_FALL;
-  }
-  else if ((state == HCSR04_WAIT_ECHO_FALL) && (level == GPIO_PIN_RESET))
-  {
-    g_hcsr04_echo_fall_cycles = cycles;
-    g_hcsr04_fall_event = 1U;
-    g_hcsr04_state = HCSR04_COMPLETE;
-  }
-}
-#endif
-
-static void DHT11_SetOutput(void)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-  GPIO_InitStruct.Pin = DHT11_PIN;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStruct);
-}
-
-static void DHT11_SetInput(void)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-  GPIO_InitStruct.Pin = DHT11_PIN;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStruct);
-}
-
-static void PA5_TestInputPullup(void)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-  GPIO_InitStruct.Pin = GPIO_PIN_5;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-}
-
-/* Timing-critical response and 40-bit transfer shared by both DHT11 paths. */
-static int DHT11_ReadTransaction(uint8_t *temp, uint8_t *hum)
-{
-  uint8_t data[5] = {0};
-  uint64_t t;
-
-  /* The required start-low interval has already elapsed. */
-  DHT11_SetInput();
-  delay_us(40);
-
-  // 3. Ждём ответ (LOW)
-  t = micros();
-  while (HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN) == GPIO_PIN_SET)
-  {
-    if ((micros() - t) > 200) return -1;
-  }
-
-  // 4. Ждём HIGH
-  t = micros();
-  while (HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN) == GPIO_PIN_RESET)
-  {
-    if ((micros() - t) > 100) return -2;
-  }
-
-  // 5. Ждём LOW (конец ответа)
-  t = micros();
-  while (HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN) == GPIO_PIN_SET)
-  {
-    if ((micros() - t) > 100) return -3;
-  }
-
-  // 6. Читаем 40 бит
-  for (int i = 0; i < 40; i++)
-  {
-    // ждём HIGH
-    t = micros();
-    while (HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN) == GPIO_PIN_RESET)
-    {
-      if ((micros() - t) > 100) return -4;
-    }
-
-    uint64_t start = micros();
-
-    // ждём LOW
-    while (HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN) == GPIO_PIN_SET)
-    {
-      if ((micros() - start) > 100) break;
-    }
-
-    uint64_t duration = micros() - start;
-
-    // > ~40us = 1, иначе 0
-    if (duration > 40)
-      data[i / 8] |= (1 << (7 - (i % 8)));
-  }
-
-  // 7. Проверка checksum
-  if ((uint8_t)(data[0] + data[1] + data[2] + data[3]) != data[4])
-    return -5;
-
-  *hum = data[0];
-  *temp = data[2];
-
-  return 0;
-}
-
-/* Blocking baseline retained for Superloop. */
-static int DHT11_Read(uint8_t *temp, uint8_t *hum)
-{
-  DHT11_SetOutput();
-  HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, GPIO_PIN_RESET);
-  HAL_Delay(30);
-
-  return DHT11_ReadTransaction(temp, hum);
-}
-
-#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU2
-static void DHT11_Async_Reset(void)
-{
-  g_dht11_ctx.state = DHT11_IDLE;
-  g_dht11_ctx.wait_until_us = 0ULL;
-  g_dht11_ctx.result = -99;
-
-  /* Do not leave PA5 actively driving the bus after a profiling reset. */
-  DHT11_SetInput();
-}
-
-static uint8_t DHT11_Async_IsRunnable(uint64_t now_us)
-{
-  if (g_dht11_ctx.state == DHT11_WAIT_START_LOW)
-  {
-    return ((int64_t)(now_us - g_dht11_ctx.wait_until_us) >= 0);
-  }
-
-  return (g_dht11_ctx.state == DHT11_IDLE) ||
-         (g_dht11_ctx.state == DHT11_READ_TRANSACTION);
-}
-
-static DHT11_StepResult_t DHT11_Async_Step(uint64_t now_us)
-{
-  switch (g_dht11_ctx.state)
-  {
-    case DHT11_IDLE:
-      g_dht11_ctx.state = DHT11_START_LOW;
-      DHT11_SetOutput();
-      HAL_GPIO_WritePin(DHT11_PORT, DHT11_PIN, GPIO_PIN_RESET);
-      g_dht11_ctx.wait_until_us = now_us + 30000ULL;
-      g_dht11_ctx.state = DHT11_WAIT_START_LOW;
-      return DHT11_STEP_WAITING;
-
-    case DHT11_WAIT_START_LOW:
-      if ((int64_t)(now_us - g_dht11_ctx.wait_until_us) < 0)
-      {
-        return DHT11_STEP_WAITING;
-      }
-
-      g_dht11_ctx.state = DHT11_READ_TRANSACTION;
-      /* Fall through: the remaining bitstream must run atomically. */
-
-    case DHT11_READ_TRANSACTION:
-      g_dht11_ctx.result = DHT11_ReadTransaction(&g_temp, &g_hum);
-      g_dht11_ctx.state = (g_dht11_ctx.result == 0)
-          ? DHT11_DONE : DHT11_ERROR;
-      return (g_dht11_ctx.result == 0)
-          ? DHT11_STEP_COMPLETE : DHT11_STEP_ERROR;
-
-    default:
-      g_dht11_ctx.result = -1;
-      g_dht11_ctx.state = DHT11_ERROR;
-      return DHT11_STEP_ERROR;
-  }
+  HCSR04_Async_OnExti(GPIO_Pin);
 }
 #endif
 
@@ -1205,489 +222,15 @@ static const uint32_t g_sched_task_count =
     sizeof(g_sched_tasks) / sizeof(g_sched_tasks[0]);
 #endif
 
-static void Print_Debug_Status(void)
-{
-  char msg[180];
-
-  if (g_dht_res == 0 && g_distance_cm >= 0)
-  {
-    snprintf(msg, sizeof(msg),
-             "tau1_runs=%lu | tau2_runs=%lu | Distance=%d cm | Temp=%d C | Hum=%d %%\r\n",
-             tau1.run_count,
-             tau2.run_count,
-             g_distance_cm,
-             g_temp,
-             g_hum);
-  }
-  else if (g_dht_res != 0 && g_distance_cm >= 0)
-  {
-    snprintf(msg, sizeof(msg),
-             "tau1_runs=%lu | tau2_runs=%lu | Distance=%d cm | DHT11 error=%d\r\n",
-             tau1.run_count,
-             tau2.run_count,
-             g_distance_cm,
-             g_dht_res);
-  }
-  else if (g_dht_res == 0 && g_distance_cm < 0)
-  {
-    snprintf(msg, sizeof(msg),
-             "tau1_runs=%lu | tau2_runs=%lu | HC-SR04 error=%d | Temp=%d C | Hum=%d %%\r\n",
-             tau1.run_count,
-             tau2.run_count,
-             g_distance_cm,
-             g_temp,
-             g_hum);
-  }
-  else
-  {
-    snprintf(msg, sizeof(msg),
-             "tau1_runs=%lu | tau2_runs=%lu | HC-SR04 error=%d | DHT11 error=%d\r\n",
-             tau1.run_count,
-             tau2.run_count,
-             g_distance_cm,
-             g_dht_res);
-  }
-
-  uart_print(msg);
-}
-
-static void Task_ResetStats(Task_t *task)
-{
-  task->run_count = 0;
-
-  task->total_exec_us = 0;
-  task->min_exec_us = 0;
-  task->max_exec_us = 0;
-
-  task->total_response_us = 0;
-  task->min_response_us = 0;
-  task->max_response_us = 0;
-
-  task->deadline_miss_count = 0;
-  task->max_lateness_us = 0;
-
-  task->skipped_release_count = 0;
-  task->total_timing_failures = 0;
-
-  task->job_active = 0;
-  task->active_release_us = 0;
-  task->remaining_exec_us = 0;
-  task->accumulated_exec_us = 0;
-
-  for (int i = 0; i < EXEC_HIST_BINS; i++)
-  {
-    task->exec_hist[i] = 0;
-  }
-}
-
-static void Task_UpdateExecHistogram(Task_t *task, uint64_t exec_us)
-{
-  if (exec_us < 5000)
-  {
-    task->exec_hist[0]++;
-  }
-  else if (exec_us < 10000)
-  {
-    task->exec_hist[1]++;
-  }
-  else if (exec_us < 15000)
-  {
-    task->exec_hist[2]++;
-  }
-  else if (exec_us < 20000)
-  {
-    task->exec_hist[3]++;
-  }
-  else if (exec_us < 25000)
-  {
-    task->exec_hist[4]++;
-  }
-  else if (exec_us < 30000)
-  {
-    task->exec_hist[5]++;
-  }
-  else if (exec_us < 32000)
-  {
-    task->exec_hist[6]++;
-  }
-  else if (exec_us < 34000)
-  {
-    task->exec_hist[7]++;
-  }
-  else if (exec_us < 36000)
-  {
-    task->exec_hist[8]++;
-  }
-  else
-  {
-    task->exec_hist[9]++;
-  }
-}
-
 static void Task_SaveExecSample(Task_t *task, uint64_t exec_time_us)
 {
   if (task == &tau1)
   {
-    if (tau1_sample_count < TAU1_MAX_SAMPLES)
-    {
-      tau1_exec_samples[tau1_sample_count++] = (uint32_t)exec_time_us;
-    }
+    ProfileSamples_SaveTau1(exec_time_us);
   }
   else if (task == &tau2)
   {
-    if (tau2_sample_count < TAU2_MAX_SAMPLES)
-    {
-      tau2_exec_samples[tau2_sample_count++] = (uint32_t)exec_time_us;
-    }
-  }
-}
-
-static void Task_UpdateExecStats(Task_t *task, uint64_t exec_us)
-{
-  task->total_exec_us += exec_us;
-
-  if (task->run_count == 1)
-  {
-    task->min_exec_us = exec_us;
-    task->max_exec_us = exec_us;
-  }
-  else
-  {
-    if (exec_us < task->min_exec_us)
-    {
-      task->min_exec_us = exec_us;
-    }
-
-    if (exec_us > task->max_exec_us)
-    {
-      task->max_exec_us = exec_us;
-    }
-  }
-
-  Task_UpdateExecHistogram(task, exec_us);
-}
-
-static void Task_CheckDeadline(Task_t *task, uint64_t response_time_us)
-{
-  if (response_time_us > task->deadline_us)
-  {
-    uint64_t lateness_us = response_time_us - task->deadline_us;
-
-    task->deadline_miss_count++;
-    task->total_timing_failures++;
-
-    if (lateness_us > task->max_lateness_us)
-    {
-      task->max_lateness_us = lateness_us;
-    }
-  }
-}
-
-static void Task_UpdateResponseStats(Task_t *task, uint64_t response_us)
-{
-  task->total_response_us += response_us;
-
-  if (task->run_count == 1)
-  {
-    task->min_response_us = response_us;
-    task->max_response_us = response_us;
-  }
-  else
-  {
-    if (response_us < task->min_response_us)
-    {
-      task->min_response_us = response_us;
-    }
-
-    if (response_us > task->max_response_us)
-    {
-      task->max_response_us = response_us;
-    }
-  }
-}
-
-#if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
-static uint64_t Scheduler_TaskAbsoluteDeadline(Task_t *task)
-{
-  uint64_t release_us = task->job_active
-      ? task->active_release_us
-      : task->next_release_us;
-
-  return release_us + task->deadline_us;
-}
-
-static uint8_t Scheduler_TaskReady(const SchedTaskRef_t *task_ref,
-                                   uint64_t now_us)
-{
-  Task_t *task = task_ref->task;
-
-  if (task->job_active)
-  {
-    if (task_ref->kind == SCHED_TASK_STAGED_HCSR04)
-    {
-      #if ENABLE_REAL_TAU1
-      return HCSR04_Async_IsRunnable(now_us);
-      #else
-      return 0U;
-      #endif
-    }
-
-    if (task_ref->kind == SCHED_TASK_STAGED_DHT11)
-    {
-      #if ENABLE_REAL_TAU2
-      return DHT11_Async_IsRunnable(now_us);
-      #else
-      return 0U;
-      #endif
-    }
-
-    return 1U;
-  }
-
-  return ((int64_t)(now_us - task->next_release_us) >= 0);
-}
-
-static SchedTaskRef_t *Scheduler_SelectChunkedEDF(SchedTaskRef_t *tasks,
-                                                  uint32_t count,
-                                                  uint64_t now_us)
-{
-  SchedTaskRef_t *selected = NULL;
-  uint64_t selected_deadline_us = 0;
-
-  for (uint32_t i = 0; i < count; i++)
-  {
-    Task_t *task = tasks[i].task;
-
-    if (!tasks[i].enabled || task == NULL)
-    {
-      continue;
-    }
-
-    if ((tasks[i].kind == SCHED_TASK_SYNTHETIC) &&
-        (tasks[i].workload_us == 0ULL))
-    {
-      continue;
-    }
-
-    if (!Scheduler_TaskReady(&tasks[i], now_us))
-    {
-      continue;
-    }
-
-    uint64_t absolute_deadline_us = Scheduler_TaskAbsoluteDeadline(task);
-
-    if (selected == NULL || absolute_deadline_us < selected_deadline_us)
-    {
-      selected = &tasks[i];
-      selected_deadline_us = absolute_deadline_us;
-    }
-  }
-
-  return selected;
-}
-
-static void Scheduler_CompleteChunkedTask(Task_t *task)
-{
-  uint64_t finish_us = scheduler_now_us();
-  uint64_t response_time = finish_us - task->active_release_us;
-
-  task->run_count++;
-
-  Task_UpdateExecStats(task, task->accumulated_exec_us);
-  Task_UpdateResponseStats(task, response_time);
-  Task_CheckDeadline(task, response_time);
-  Task_AdvanceRelease(task, finish_us);
-
-  task->job_active = 0U;
-  task->active_release_us = 0ULL;
-  task->remaining_exec_us = 0ULL;
-  task->accumulated_exec_us = 0ULL;
-}
-
-#if ENABLE_REAL_TAU1
-static void Scheduler_RunChunkedHCSR04(Task_t *task)
-{
-  uint64_t exec_start = micros();
-  uint64_t exec_finish;
-  uint8_t job_complete = 0U;
-  int distance_cm;
-
-  if (!task->job_active)
-  {
-    task->active_release_us = task->next_release_us;
-    task->remaining_exec_us = 0ULL;
-    task->accumulated_exec_us = 0ULL;
-    task->job_active = 1U;
-
-    HCSR04_Async_Start();
-  }
-  else if (HCSR04_Async_Finalize(&distance_cm) != 0U)
-  {
-    g_distance_cm = distance_cm;
-    job_complete = 1U;
-  }
-  else
-  {
-    if (HCSR04_Async_Timeout(&distance_cm) != 0U)
-    {
-      g_distance_cm = distance_cm;
-      job_complete = 1U;
-    }
-  }
-
-  exec_finish = micros();
-  task->accumulated_exec_us += exec_finish - exec_start;
-
-  if (job_complete != 0U)
-  {
-    Scheduler_CompleteChunkedTask(task);
-  }
-}
-#endif
-
-#if ENABLE_REAL_TAU2
-static void Scheduler_RunChunkedDHT11(Task_t *task)
-{
-  uint64_t exec_start = micros();
-  uint64_t exec_finish;
-  DHT11_StepResult_t step_result;
-
-  if (!task->job_active)
-  {
-    task->active_release_us = task->next_release_us;
-    task->remaining_exec_us = 0ULL;
-    task->accumulated_exec_us = 0ULL;
-    task->job_active = 1U;
-  }
-
-  step_result = DHT11_Async_Step(scheduler_now_us());
-  exec_finish = micros();
-  task->accumulated_exec_us += exec_finish - exec_start;
-
-  if ((step_result == DHT11_STEP_COMPLETE) ||
-      (step_result == DHT11_STEP_ERROR))
-  {
-    g_dht_res = g_dht11_ctx.result;
-    Task_SaveExecSample(task, task->accumulated_exec_us);
-    Scheduler_CompleteChunkedTask(task);
-    DHT11_Async_Reset();
-  }
-}
-#endif
-
-static void Scheduler_RunChunkedTask(SchedTaskRef_t *selected)
-{
-  Task_t *task = selected->task;
-
-  if (selected->kind == SCHED_TASK_STAGED_HCSR04)
-  {
-    #if ENABLE_REAL_TAU1
-    Scheduler_RunChunkedHCSR04(task);
-    #endif
-    return;
-  }
-
-  if (selected->kind == SCHED_TASK_STAGED_DHT11)
-  {
-    #if ENABLE_REAL_TAU2
-    Scheduler_RunChunkedDHT11(task);
-    #endif
-    return;
-  }
-
-  if (!task->job_active)
-  {
-    task->active_release_us = task->next_release_us;
-    task->remaining_exec_us = selected->workload_us;
-    task->accumulated_exec_us = 0;
-    task->job_active = 1U;
-  }
-
-  uint64_t chunk_us = EDF_CHUNK_US;
-
-  if (task->remaining_exec_us < chunk_us)
-  {
-    chunk_us = task->remaining_exec_us;
-  }
-
-  uint64_t exec_start = micros();
-
-  Synthetic_Workload_us(chunk_us);
-
-  uint64_t exec_finish = micros();
-  uint64_t actual_chunk_exec_us = exec_finish - exec_start;
-
-  task->accumulated_exec_us += actual_chunk_exec_us;
-  task->remaining_exec_us -= chunk_us;
-
-  if (task->remaining_exec_us == 0ULL)
-  {
-    Scheduler_CompleteChunkedTask(task);
-  }
-}
-#endif
-
-static void Scheduler_ResetStats(void)
-{
-  g_sched_total_cycles = 0;
-  g_sched_min_cycles = 0;
-  g_sched_max_cycles = 0;
-  g_sched_count = 0;
-}
-
-static void Scheduler_UpdateStats(uint32_t sched_cycles)
-{
-  g_sched_count++;
-  g_sched_total_cycles += sched_cycles;
-
-  if (g_sched_count == 1)
-  {
-    g_sched_min_cycles = sched_cycles;
-    g_sched_max_cycles = sched_cycles;
-  }
-  else
-  {
-    if (sched_cycles < g_sched_min_cycles)
-    {
-      g_sched_min_cycles = sched_cycles;
-    }
-
-    if (sched_cycles > g_sched_max_cycles)
-    {
-      g_sched_max_cycles = sched_cycles;
-    }
-  }
-}
-
-static void Polling_ResetStats(void)
-{
-  g_poll_total_cycles = 0;
-  g_poll_min_cycles = 0;
-  g_poll_max_cycles = 0;
-  g_poll_count = 0;
-}
-
-static void Polling_UpdateStats(uint32_t poll_cycles)
-{
-  g_poll_count++;
-  g_poll_total_cycles += poll_cycles;
-
-  if (g_poll_count == 1)
-  {
-    g_poll_min_cycles = poll_cycles;
-    g_poll_max_cycles = poll_cycles;
-  }
-  else
-  {
-    if (poll_cycles < g_poll_min_cycles)
-    {
-      g_poll_min_cycles = poll_cycles;
-    }
-
-    if (poll_cycles > g_poll_max_cycles)
-    {
-      g_poll_max_cycles = poll_cycles;
-    }
+    ProfileSamples_SaveTau2(exec_time_us);
   }
 }
 
@@ -1720,121 +263,13 @@ static void Reset_Profiling_Stats(void)
 	  Task_ResetStats(&tau_control);
 	#endif
 
-  Scheduler_ResetStats();
-  Polling_ResetStats();
+  CycleMetrics_Reset(&g_scheduler_metrics);
+  CycleMetrics_Reset(&g_polling_metrics);
 
-  tau1_sample_count = 0;
-  tau2_sample_count = 0;
+  ProfileSamples_Reset();
 }
 
-static void Print_Task_Exec_Histogram(const char *title, Task_t *task)
-{
-  char msg[128];
-
-  static const char *labels[EXEC_HIST_BINS] =
-  {
-    "0-5ms",
-    "5-10ms",
-    "10-15ms",
-    "15-20ms",
-    "20-25ms",
-    "25-30ms",
-    "30-32ms",
-    "32-34ms",
-    "34-36ms",
-    "36ms+"
-  };
-
-  snprintf(msg, sizeof(msg), "%s\r\n", title);
-  uart_print(msg);
-
-  for (int i = 0; i < EXEC_HIST_BINS; i++)
-  {
-    snprintf(msg, sizeof(msg),
-             "  %-8s : %lu\r\n",
-             labels[i],
-             (unsigned long)task->exec_hist[i]);
-    uart_print(msg);
-  }
-}
-
-static void Print_CSV_TaskLine(const char *task_label,
-                               Task_t *task,
-                               uint64_t workload_us)
-{
-  char msg[384];
-  uint64_t exec_avg_us = 0;
-  uint64_t response_avg_us = 0;
-
-  if (task->run_count > 0)
-  {
-    exec_avg_us = task->total_exec_us / task->run_count;
-    response_avg_us = task->total_response_us / task->run_count;
-  }
-
-  snprintf(msg, sizeof(msg),
-           "CSV_TASK,SCHED=%s,SCENARIO=%s,U=%lu,TASK=%s,RUNS=%lu,C_US=%lu,T_MS=%lu,D_MS=%lu,EXEC_AVG_US=%lu,RESP_AVG_US=%lu,RESP_MAX_US=%lu,MISSES=%lu,SKIPPED=%lu,FAILURES=%lu,MAX_LATENESS_US=%lu\r\n",
-           SCHED_ALGO_NAME,
-           WORKLOAD_SCENARIO_NAME,
-           (unsigned long)WORKLOAD_UTILIZATION_PERCENT,
-           task_label,
-           (unsigned long)task->run_count,
-           (unsigned long)workload_us,
-           (unsigned long)task->period_ms,
-           (unsigned long)task->deadline_ms,
-           (unsigned long)exec_avg_us,
-           (unsigned long)response_avg_us,
-           (unsigned long)task->max_response_us,
-           (unsigned long)task->deadline_miss_count,
-           (unsigned long)task->skipped_release_count,
-           (unsigned long)task->total_timing_failures,
-           (unsigned long)task->max_lateness_us);
-  uart_print(msg);
-}
-
-static void Print_Exec_Samples(void)
-{
-  char msg[64];
-
-  uart_print("\r\nTAU1_EXEC_SAMPLES_US:\r\n");
-
-  for (uint32_t i = 0; i < tau1_sample_count; i++)
-  {
-    snprintf(msg, sizeof(msg), "%lu", (unsigned long)tau1_exec_samples[i]);
-    uart_print(msg);
-
-    if (i + 1 < tau1_sample_count)
-    {
-      uart_print(",");
-    }
-
-    if ((i + 1) % 20 == 0)
-    {
-      uart_print("\r\n");
-    }
-  }
-
-  uart_print("\r\n\r\nTAU2_EXEC_SAMPLES_US:\r\n");
-
-  for (uint32_t i = 0; i < tau2_sample_count; i++)
-  {
-    snprintf(msg, sizeof(msg), "%lu", (unsigned long)tau2_exec_samples[i]);
-    uart_print(msg);
-
-    if (i + 1 < tau2_sample_count)
-    {
-      uart_print(",");
-    }
-
-    if ((i + 1) % 20 == 0)
-    {
-      uart_print("\r\n");
-    }
-  }
-
-  uart_print("\r\n");
-}
-
+/* App-level adapter: binds module statistics to this firmware's task set and UART. */
 static void Print_Profiling_Summary(void)
 {
   char msg[384];
@@ -1865,7 +300,7 @@ static void Print_Profiling_Summary(void)
 	  uint64_t tau_control_avg_response = 0;
 	#endif
 
-  uint32_t cycles_per_us = g_cycles_per_us;
+  uint32_t cycles_per_us = PlatformTime_CyclesPerUs();
 
   uint64_t sched_avg_cycles = 0;
   uint64_t sched_total_us = 0;
@@ -1924,17 +359,17 @@ static void Print_Profiling_Summary(void)
 	  }
 	#endif
 
-  if (g_sched_count > 0)
+  if (g_scheduler_metrics.count > 0U)
   {
-    sched_avg_cycles = g_sched_total_cycles / g_sched_count;
-    sched_total_us = g_sched_total_cycles / cycles_per_us;
+    sched_avg_cycles = g_scheduler_metrics.total_cycles / g_scheduler_metrics.count;
+    sched_total_us = g_scheduler_metrics.total_cycles / cycles_per_us;
     sched_overhead_x10000 = (sched_total_us * 1000000ULL) / PROFILE_WINDOW_US;
   }
 
-  if (g_poll_count > 0)
+  if (g_polling_metrics.count > 0U)
   {
-    poll_avg_cycles = g_poll_total_cycles / g_poll_count;
-    poll_total_us = g_poll_total_cycles / cycles_per_us;
+    poll_avg_cycles = g_polling_metrics.total_cycles / g_polling_metrics.count;
+    poll_total_us = g_polling_metrics.total_cycles / cycles_per_us;
     poll_overhead_x10000 = (poll_total_us * 1000000ULL) / PROFILE_WINDOW_US;
   }
 
@@ -2054,7 +489,7 @@ static void Print_Profiling_Summary(void)
 			   (unsigned long)tau1.total_timing_failures);
 	  uart_print(msg);
 
-	  Print_Task_Exec_Histogram("  exec distribution:", &tau1);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau1);
 	#endif
 
 	#if ENABLE_REAL_TAU2
@@ -2090,7 +525,7 @@ static void Print_Profiling_Summary(void)
 			   (unsigned long)tau2.total_timing_failures);
 	  uart_print(msg);
 
-	  Print_Task_Exec_Histogram("  exec distribution:", &tau2);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau2);
 	#endif
 
   #if ENABLE_SYNTH_IMU
@@ -2133,7 +568,7 @@ static void Print_Profiling_Summary(void)
              (unsigned long)tau_imu.total_timing_failures);
     uart_print(msg);
 
-    Print_Task_Exec_Histogram("  exec distribution:", &tau_imu);
+    TaskReporting_PrintExecHistogram("  exec distribution:", &tau_imu);
   #endif
 
 	#if ENABLE_SYNTH_LIDAR
@@ -2176,7 +611,7 @@ static void Print_Profiling_Summary(void)
 			   (unsigned long)tau_lidar.total_timing_failures);
 	  uart_print(msg);
 
-	  Print_Task_Exec_Histogram("  exec distribution:", &tau_lidar);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau_lidar);
 	#endif
 
 	#if ENABLE_SYNTH_CAMERA
@@ -2219,7 +654,7 @@ static void Print_Profiling_Summary(void)
 			   (unsigned long)tau_camera.total_timing_failures);
 	  uart_print(msg);
 
-	  Print_Task_Exec_Histogram("  exec distribution:", &tau_camera);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau_camera);
 	#endif
 
 	#if ENABLE_SYNTH_CONTROL
@@ -2262,19 +697,19 @@ static void Print_Profiling_Summary(void)
 			   (unsigned long)tau_control.total_timing_failures);
 	  uart_print(msg);
 
-	  Print_Task_Exec_Histogram("  exec distribution:", &tau_control);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau_control);
 	#endif
 
   snprintf(msg, sizeof(msg),
            "scheduler decision | loops=%lu\r\n",
-           (unsigned long)g_sched_count);
+           (unsigned long)g_scheduler_metrics.count);
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
            "  cycles avg=%lu min=%lu max=%lu\r\n",
            (unsigned long)sched_avg_cycles,
-           (unsigned long)g_sched_min_cycles,
-           (unsigned long)g_sched_max_cycles);
+           (unsigned long)g_scheduler_metrics.min_cycles,
+           (unsigned long)g_scheduler_metrics.max_cycles);
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
@@ -2286,14 +721,14 @@ static void Print_Profiling_Summary(void)
 
   snprintf(msg, sizeof(msg),
            "polling check | loops=%lu\r\n",
-           (unsigned long)g_poll_count);
+           (unsigned long)g_polling_metrics.count);
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
            "  cycles avg=%lu min=%lu max=%lu\r\n",
            (unsigned long)poll_avg_cycles,
-           (unsigned long)g_poll_min_cycles,
-           (unsigned long)g_poll_max_cycles);
+           (unsigned long)g_polling_metrics.min_cycles,
+           (unsigned long)g_polling_metrics.max_cycles);
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
@@ -2344,7 +779,7 @@ static void Print_Profiling_Summary(void)
   uart_print(msg);
 #endif
 
-  /* Print_Exec_Samples(); */
+  /* ProfileSamples_Print(); */
 
   snprintf(msg, sizeof(msg),
            "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
@@ -2354,10 +789,10 @@ static void Print_Profiling_Summary(void)
            (unsigned long)PROFILE_WINDOW_US,
            (unsigned int)INTEGRATED_SYNTH_TASK_COUNT,
            (unsigned long)SCHED_CSV_CHUNK_US,
-           (unsigned long)g_sched_count,
+           (unsigned long)g_scheduler_metrics.count,
            (unsigned long)(sched_overhead_x10000 / 10000),
            (unsigned long)(sched_overhead_x10000 % 10000),
-           (unsigned long)g_poll_count,
+           (unsigned long)g_polling_metrics.count,
            (unsigned long)(poll_overhead_x10000 / 10000),
            (unsigned long)(poll_overhead_x10000 % 10000),
            (unsigned long)(task_exec_percent_x10000 / 10000),
@@ -2369,850 +804,40 @@ static void Print_Profiling_Summary(void)
   uart_print(msg);
 
   #if ENABLE_SYNTH_IMU
-    Print_CSV_TaskLine("IMU", &tau_imu, TAU_IMU_WORKLOAD_US);
+    TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
+                               WORKLOAD_UTILIZATION_PERCENT, "IMU", &tau_imu,
+                               TAU_IMU_WORKLOAD_US);
   #endif
 
   #if ENABLE_SYNTH_LIDAR
-    Print_CSV_TaskLine("LIDAR", &tau_lidar, TAU_LIDAR_WORKLOAD_US);
+    TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
+                               WORKLOAD_UTILIZATION_PERCENT, "LIDAR", &tau_lidar,
+                               TAU_LIDAR_WORKLOAD_US);
   #endif
 
   #if ENABLE_SYNTH_CAMERA
-    Print_CSV_TaskLine("CAMERA", &tau_camera, TAU_CAMERA_WORKLOAD_US);
+    TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
+                               WORKLOAD_UTILIZATION_PERCENT, "CAMERA", &tau_camera,
+                               TAU_CAMERA_WORKLOAD_US);
   #endif
 
   #if ENABLE_SYNTH_CONTROL
-    Print_CSV_TaskLine("CONTROL", &tau_control, TAU_CONTROL_WORKLOAD_US);
+    TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
+                               WORKLOAD_UTILIZATION_PERCENT, "CONTROL", &tau_control,
+                               TAU_CONTROL_WORKLOAD_US);
   #endif
 
   uart_print("=======================================\r\n\r\n");
 }
 
 
-static void Run_Isolated_Tau1_Profile(void)
-{
-  uint32_t start_ms = HAL_GetTick();
-
-  uart_print("\r\n=== ISOLATED TAU1 HC-SR04 PROFILE ===\r\n");
-  uart_print("Only tau1 is running. No tau2. No scheduler competition.\r\n");
-
-  Reset_Profiling_Stats();
-
-  while ((uint32_t)(HAL_GetTick() - start_ms) < PROFILE_WINDOW_MS)
-  {
-    uint32_t release_ms = HAL_GetTick();
-
-    uint64_t exec_start = micros();
-
-    Tau1_Run();
-
-    uint64_t exec_finish = micros();
-    uint32_t finish_ms = HAL_GetTick();
-
-    uint64_t exec_time = exec_finish - exec_start;
-    uint64_t response_time = ((uint32_t)(finish_ms - release_ms)) * 1000ULL;
-
-    Task_UpdateExecStats(&tau1, exec_time);
-    Task_SaveExecSample(&tau1, exec_time);
-    Task_UpdateResponseStats(&tau1, response_time);
-    Task_CheckDeadline(&tau1, response_time);
-
-    uint32_t next_release_ms = release_ms + tau1.period_ms;
-
-    while ((int32_t)(HAL_GetTick() - next_release_ms) < 0)
-    {
-#if SCHEDULER_MODE == SCHED_WFI_OPTIMIZED
-      __WFI();
-#endif
-    }
-  }
-
-  Print_Profiling_Summary();
-
-  while (1)
-  {
-#if SCHEDULER_MODE == SCHED_WFI_OPTIMIZED
-    __WFI();
-#endif
-  }
-}
-
-static void Run_Isolated_Tau2_Profile(void)
-{
-  uint32_t start_ms = HAL_GetTick();
-
-  uart_print("\r\n=== ISOLATED TAU2 DHT11 PROFILE ===\r\n");
-  uart_print("Only tau2 is running. No tau1. No scheduler competition.\r\n");
-
-  Reset_Profiling_Stats();
-
-  while ((uint32_t)(HAL_GetTick() - start_ms) < PROFILE_WINDOW_MS)
-  {
-    uint32_t release_ms = HAL_GetTick();
-
-    uint64_t exec_start = micros();
-
-    Tau2_Run();
-
-    uint64_t exec_finish = micros();
-    uint32_t finish_ms = HAL_GetTick();
-
-    uint64_t exec_time = exec_finish - exec_start;
-    uint64_t response_time = ((uint32_t)(finish_ms - release_ms)) * 1000ULL;
-
-    Task_UpdateExecStats(&tau2, exec_time);
-    Task_SaveExecSample(&tau2, exec_time);
-    Task_UpdateResponseStats(&tau2, response_time);
-    Task_CheckDeadline(&tau2, response_time);
-
-    uint32_t next_release_ms = release_ms + tau2.period_ms;
-
-    while ((int32_t)(HAL_GetTick() - next_release_ms) < 0)
-    {
-#if SCHEDULER_MODE == SCHED_WFI_OPTIMIZED
-      __WFI();
-#endif
-    }
-  }
-
-  Print_Profiling_Summary();
-
-  while (1)
-  {
-#if SCHEDULER_MODE == SCHED_WFI_OPTIMIZED
-    __WFI();
-#endif
-  }
-}
-
-#if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
-/* Measures task bodies and the remaining clean two-task busy-polling Superloop. */
-static void Run_Minimal_Superloop_Profile(void)
-{
-  uint64_t profile_start_us;
-  uint64_t profile_end_us;
-  uint64_t profile_finish_us;
-  uint64_t profile_elapsed_us;
-  uint64_t tau1_next_release_us;
-  uint64_t tau2_next_release_us;
-  uint64_t tau1_task_cycles = 0;
-  uint64_t tau2_task_cycles = 0;
-  uint64_t task_cycles;
-  uint64_t tau1_task_us;
-  uint64_t tau2_task_us;
-  uint64_t task_us;
-  uint64_t superloop_us;
-  uint32_t dwt_measurement_overhead_cycles = UINT32_MAX;
-  uint32_t tau1_runs = 0;
-  uint32_t tau2_runs = 0;
-
-  for (uint32_t i = 0; i < 1000U; i++)
-  {
-    uint32_t start_cycles = DWT->CYCCNT;
-    uint32_t end_cycles = DWT->CYCCNT;
-    uint32_t delta_cycles = end_cycles - start_cycles;
-
-    if (delta_cycles < dwt_measurement_overhead_cycles)
-    {
-      dwt_measurement_overhead_cycles = delta_cycles;
-    }
-  }
-
-  profile_start_us = scheduler_now_us();
-  profile_end_us = profile_start_us + MINIMAL_PROFILE_WINDOW_US;
-  tau1_next_release_us = profile_start_us;
-  tau2_next_release_us = profile_start_us;
-
-  while (1)
-  {
-    uint64_t now_us = scheduler_now_us();
-
-    if ((int64_t)(now_us - profile_end_us) >= 0)
-    {
-      break;
-    }
-
-    if (now_us >= tau1_next_release_us)
-    {
-      uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
-      uint32_t task_end_cycles = DWT->CYCCNT;
-      tau1_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
-                                            dwt_measurement_overhead_cycles);
-
-      uint64_t finish_us = scheduler_now_us();
-      tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
-
-      while (finish_us > tau1_next_release_us)
-      {
-        tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
-      }
-
-      tau1_runs++;
-    }
-
-    now_us = scheduler_now_us();
-
-    if ((int64_t)(now_us - profile_end_us) >= 0)
-    {
-      break;
-    }
-
-    if (now_us >= tau2_next_release_us)
-    {
-      uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
-      uint32_t task_end_cycles = DWT->CYCCNT;
-      tau2_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
-                                            dwt_measurement_overhead_cycles);
-
-      uint64_t finish_us = scheduler_now_us();
-      tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
-
-      while (finish_us > tau2_next_release_us)
-      {
-        tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
-      }
-
-      tau2_runs++;
-    }
-  }
-
-  profile_finish_us = scheduler_now_us();
-  profile_elapsed_us = profile_finish_us - profile_start_us;
-  tau1_task_us = tau1_task_cycles / g_cycles_per_us;
-  tau2_task_us = tau2_task_cycles / g_cycles_per_us;
-  task_cycles = tau1_task_cycles + tau2_task_cycles;
-  task_us = task_cycles / g_cycles_per_us;
-  /* Includes end-window checks, task DWT measurements, and runs++ counters. */
-  superloop_us = profile_elapsed_us > task_us
-                 ? profile_elapsed_us - task_us : 0ULL;
-
-  uart_print("\r\n=== CLEAN SUPERLOOP PROFILE ===\r\n");
-  uart_print("scenario: ");
-  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
-  uart_print("\r\nwindow_us: ");
-  uart_print_u64(profile_elapsed_us);
-  uart_print("\r\n\r\ntau1:\r\n  runs: ");
-  uart_print_u64(tau1_runs);
-  uart_print("\r\n  task_us: ");
-  uart_print_u64(tau1_task_us);
-  uart_print("\r\n\r\ntau2:\r\n  runs: ");
-  uart_print_u64(tau2_runs);
-  uart_print("\r\n  task_us: ");
-  uart_print_u64(tau2_task_us);
-  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
-  uart_print_u64(task_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nsuperloop:\r\n  total_us: ");
-  uart_print_u64(superloop_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
-  uart_print(" %\r\n");
-
-  uart_print("CSV_CLEAN_SUPERLOOP,SCENARIO=");
-  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
-  uart_print(",U=");
-  uart_print_u64(MINIMAL_WORKLOAD_UTILIZATION_PERCENT);
-  uart_print(",WINDOW_US=");
-  uart_print_u64(profile_elapsed_us);
-  uart_print(",TAU1_RUNS=");
-  uart_print_u64(tau1_runs);
-  uart_print(",TAU2_RUNS=");
-  uart_print_u64(tau2_runs);
-  uart_print(",TASK_US=");
-  uart_print_u64(task_us);
-  uart_print(",TASK_PCT=");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(",SUPERLOOP_US=");
-  uart_print_u64(superloop_us);
-  uart_print(",SUPERLOOP_PCT=");
-  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
-  uart_print("\r\n");
-
-  while (1)
-  {
-  }
-}
-#endif
-
-#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE
-/*
- * Diagnostic profile only: DWT instrumentation is included in the measured
- * checks. Use Run_Minimal_Superloop_Profile() for clean Superloop overhead.
- */
-static void Run_Superloop_Checks_Profile(void)
-{
-  uint64_t profile_start_us;
-  uint64_t profile_end_us;
-  uint64_t profile_finish_us;
-  uint64_t profile_elapsed_us;
-  uint64_t tau1_next_release_us;
-  uint64_t tau2_next_release_us;
-  uint64_t readiness_cycles = 0;
-  uint64_t release_maintenance_cycles = 0;
-  uint64_t tau1_task_cycles = 0;
-  uint64_t tau2_task_cycles = 0;
-  uint64_t task_cycles;
-  uint64_t check_cycles;
-  uint64_t tau1_task_us;
-  uint64_t tau2_task_us;
-  uint64_t task_us;
-  uint64_t readiness_us;
-  uint64_t release_us;
-  uint64_t checks_us;
-  uint32_t dwt_measurement_overhead_cycles = UINT32_MAX;
-  uint32_t tau1_runs = 0;
-  uint32_t tau2_runs = 0;
-
-  for (uint32_t i = 0; i < 1000U; i++)
-  {
-    uint32_t start_cycles = DWT->CYCCNT;
-    uint32_t end_cycles = DWT->CYCCNT;
-    uint32_t delta_cycles = end_cycles - start_cycles;
-
-    if (delta_cycles < dwt_measurement_overhead_cycles)
-    {
-      dwt_measurement_overhead_cycles = delta_cycles;
-    }
-  }
-
-  profile_start_us = scheduler_now_us();
-  profile_end_us = profile_start_us + MINIMAL_PROFILE_WINDOW_US;
-  tau1_next_release_us = profile_start_us;
-  tau2_next_release_us = profile_start_us;
-
-  while (1)
-  {
-    uint32_t check_start_cycles = DWT->CYCCNT;
-    uint64_t now_us = scheduler_now_us();
-    uint8_t tau1_ready = ((int64_t)(now_us - tau1_next_release_us) >= 0);
-    uint32_t check_end_cycles = DWT->CYCCNT;
-
-    readiness_cycles += Correct_DWT_Delta(check_end_cycles - check_start_cycles,
-                                          dwt_measurement_overhead_cycles);
-
-    if ((int64_t)(now_us - profile_end_us) >= 0)
-    {
-      break;
-    }
-
-    if (tau1_ready)
-    {
-      uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
-      uint32_t task_end_cycles = DWT->CYCCNT;
-
-      tau1_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
-                                            dwt_measurement_overhead_cycles);
-
-      uint32_t release_start_cycles = DWT->CYCCNT;
-      uint64_t finish_us = scheduler_now_us();
-
-      tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
-
-      while ((int64_t)(finish_us - tau1_next_release_us) > 0)
-      {
-        tau1_next_release_us += MINIMAL_TAU1_PERIOD_US;
-      }
-
-      uint32_t release_end_cycles = DWT->CYCCNT;
-      release_maintenance_cycles += Correct_DWT_Delta(
-          release_end_cycles - release_start_cycles,
-          dwt_measurement_overhead_cycles);
-      tau1_runs++;
-    }
-
-    check_start_cycles = DWT->CYCCNT;
-    now_us = scheduler_now_us();
-    uint8_t tau2_ready = ((int64_t)(now_us - tau2_next_release_us) >= 0);
-    check_end_cycles = DWT->CYCCNT;
-
-    readiness_cycles += Correct_DWT_Delta(check_end_cycles - check_start_cycles,
-                                          dwt_measurement_overhead_cycles);
-
-    if ((int64_t)(now_us - profile_end_us) >= 0)
-    {
-      break;
-    }
-
-    if (tau2_ready)
-    {
-      uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
-      uint32_t task_end_cycles = DWT->CYCCNT;
-
-      tau2_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
-                                            dwt_measurement_overhead_cycles);
-
-      uint32_t release_start_cycles = DWT->CYCCNT;
-      uint64_t finish_us = scheduler_now_us();
-
-      tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
-
-      while ((int64_t)(finish_us - tau2_next_release_us) > 0)
-      {
-        tau2_next_release_us += MINIMAL_TAU2_PERIOD_US;
-      }
-
-      uint32_t release_end_cycles = DWT->CYCCNT;
-      release_maintenance_cycles += Correct_DWT_Delta(
-          release_end_cycles - release_start_cycles,
-          dwt_measurement_overhead_cycles);
-      tau2_runs++;
-    }
-  }
-
-  profile_finish_us = scheduler_now_us();
-  profile_elapsed_us = profile_finish_us - profile_start_us;
-  task_cycles = tau1_task_cycles + tau2_task_cycles;
-  check_cycles = readiness_cycles + release_maintenance_cycles;
-  tau1_task_us = tau1_task_cycles / g_cycles_per_us;
-  tau2_task_us = tau2_task_cycles / g_cycles_per_us;
-  task_us = task_cycles / g_cycles_per_us;
-  readiness_us = readiness_cycles / g_cycles_per_us;
-  release_us = release_maintenance_cycles / g_cycles_per_us;
-  checks_us = check_cycles / g_cycles_per_us;
-
-  uart_print("\r\n=== SUPERLOOP CHECKS PROFILE ===\r\n");
-  uart_print("scenario: ");
-  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
-  uart_print("\r\nwindow_us: ");
-  uart_print_u64(profile_elapsed_us);
-  uart_print("\r\n\r\ntau1:\r\n  runs: ");
-  uart_print_u64(tau1_runs);
-  uart_print("\r\n  task_us: ");
-  uart_print_u64(tau1_task_us);
-  uart_print("\r\n\r\ntau2:\r\n  runs: ");
-  uart_print_u64(tau2_runs);
-  uart_print("\r\n  task_us: ");
-  uart_print_u64(tau2_task_us);
-  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
-  uart_print_u64(task_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nreadiness_checks:\r\n  total_cycles: ");
-  uart_print_u64(readiness_cycles);
-  uart_print("\r\n  total_us: ");
-  uart_print_u64(readiness_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nrelease_maintenance:\r\n  total_cycles: ");
-  uart_print_u64(release_maintenance_cycles);
-  uart_print("\r\n  total_us: ");
-  uart_print_u64(release_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(release_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nmeasured_checks:\r\n  total_cycles: ");
-  uart_print_u64(check_cycles);
-  uart_print("\r\n  total_us: ");
-  uart_print_u64(checks_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(checks_us, profile_elapsed_us);
-  uart_print(" %\r\n");
-
-  uart_print("CSV_SUPERLOOP_CHECKS,SCENARIO=");
-  uart_print(MINIMAL_WORKLOAD_SCENARIO_NAME);
-  uart_print(",U=");
-  uart_print_u64(MINIMAL_WORKLOAD_UTILIZATION_PERCENT);
-  uart_print(",WINDOW_US=");
-  uart_print_u64(profile_elapsed_us);
-  uart_print(",TAU1_RUNS=");
-  uart_print_u64(tau1_runs);
-  uart_print(",TAU2_RUNS=");
-  uart_print_u64(tau2_runs);
-  uart_print(",TASK_US=");
-  uart_print_u64(task_us);
-  uart_print(",TASK_PCT=");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(",READINESS_CYCLES=");
-  uart_print_u64(readiness_cycles);
-  uart_print(",READINESS_US=");
-  uart_print_u64(readiness_us);
-  uart_print(",READINESS_PCT=");
-  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
-  uart_print(",RELEASE_CYCLES=");
-  uart_print_u64(release_maintenance_cycles);
-  uart_print(",RELEASE_US=");
-  uart_print_u64(release_us);
-  uart_print(",RELEASE_PCT=");
-  uart_print_percent_x10000(release_us, profile_elapsed_us);
-  uart_print(",CHECKS_CYCLES=");
-  uart_print_u64(check_cycles);
-  uart_print(",CHECKS_US=");
-  uart_print_u64(checks_us);
-  uart_print(",CHECKS_PCT=");
-  uart_print_percent_x10000(checks_us, profile_elapsed_us);
-  uart_print("\r\n");
-
-  while (1)
-  {
-  }
-}
-#endif
-
-#if (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN) || \
-    (EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS)
-typedef struct
-{
-  uint64_t period_us;
-  uint64_t workload_us;
-  uint64_t next_release_us;
-  uint64_t task_cycles;
-  uint32_t runs;
-} ScalabilityTask_t;
-
-static uint32_t Scalability_DWT_Measurement_Overhead(void)
-{
-  uint32_t overhead_cycles = UINT32_MAX;
-
-  for (uint32_t i = 0; i < 1000U; i++)
-  {
-    uint32_t start_cycles = DWT->CYCCNT;
-    uint32_t end_cycles = DWT->CYCCNT;
-    uint32_t delta_cycles = end_cycles - start_cycles;
-
-    if (delta_cycles < overhead_cycles)
-    {
-      overhead_cycles = delta_cycles;
-    }
-  }
-
-  return overhead_cycles;
-}
-
-static void Scalability_InitTasks(ScalabilityTask_t *tasks,
-                                  uint64_t profile_start_us)
-{
-  tasks[0] = (ScalabilityTask_t) {
-      SCALABILITY_TAU1_PERIOD_US, SCALABILITY_TAU1_WORKLOAD_US,
-      profile_start_us, 0ULL, 0U};
-  tasks[1] = (ScalabilityTask_t) {
-      SCALABILITY_TAU2_PERIOD_US, SCALABILITY_TAU2_WORKLOAD_US,
-      profile_start_us, 0ULL, 0U};
-
-  #if SCALABILITY_TASK_COUNT >= 3
-  tasks[2] = (ScalabilityTask_t) {
-      SCALABILITY_TAU3_PERIOD_US, SCALABILITY_TAU3_WORKLOAD_US,
-      profile_start_us, 0ULL, 0U};
-  #endif
-
-  #if SCALABILITY_TASK_COUNT >= 4
-  tasks[3] = (ScalabilityTask_t) {
-      SCALABILITY_TAU4_PERIOD_US, SCALABILITY_TAU4_WORKLOAD_US,
-      profile_start_us, 0ULL, 0U};
-  #endif
-}
-
-#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN
-static void Scalability_PrintTask(uint32_t task_index,
-                                  const ScalabilityTask_t *task)
-{
-  uart_print("\r\n\r\ntau");
-  uart_print_u64(task_index + 1U);
-  uart_print(":\r\n  runs: ");
-  uart_print_u64(task->runs);
-  uart_print("\r\n  task_us: ");
-  uart_print_u64(task->task_cycles / g_cycles_per_us);
-}
-#endif
-
-static void Scalability_PrintCsvRuns(const ScalabilityTask_t *tasks)
-{
-  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
-       task_index++)
-  {
-    uart_print(",TAU");
-    uart_print_u64(task_index + 1U);
-    uart_print("_RUNS=");
-    uart_print_u64(tasks[task_index].runs);
-  }
-}
-#endif
-
-#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN
-/* Clean busy-polling scalability profile: task-body DWT only. */
-static void Run_Superloop_Scalability_Clean(void)
-{
-  ScalabilityTask_t tasks[SCALABILITY_TASK_COUNT];
-  uint64_t profile_start_us;
-  uint64_t profile_end_us;
-  uint64_t profile_finish_us;
-  uint64_t profile_elapsed_us;
-  uint64_t task_cycles = 0ULL;
-  uint64_t task_us;
-  uint64_t superloop_us;
-  uint32_t dwt_measurement_overhead_cycles;
-  uint8_t profile_finished = 0U;
-
-  dwt_measurement_overhead_cycles = Scalability_DWT_Measurement_Overhead();
-  profile_start_us = scheduler_now_us();
-  profile_end_us = profile_start_us + SCALABILITY_PROFILE_WINDOW_US;
-  Scalability_InitTasks(tasks, profile_start_us);
-
-  while (profile_finished == 0U)
-  {
-    for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
-         task_index++)
-    {
-      ScalabilityTask_t *task = &tasks[task_index];
-      uint64_t now_us = scheduler_now_us();
-
-      if ((int64_t)(now_us - profile_end_us) >= 0)
-      {
-        profile_finished = 1U;
-        break;
-      }
-
-      if (now_us >= task->next_release_us)
-      {
-        uint32_t task_start_cycles = DWT->CYCCNT;
-        Synthetic_Workload_us(task->workload_us);
-        uint32_t task_end_cycles = DWT->CYCCNT;
-        uint64_t finish_us;
-
-        task->task_cycles += Correct_DWT_Delta(
-            task_end_cycles - task_start_cycles,
-            dwt_measurement_overhead_cycles);
-
-        finish_us = scheduler_now_us();
-        task->next_release_us += task->period_us;
-
-        while ((int64_t)(finish_us - task->next_release_us) > 0)
-        {
-          task->next_release_us += task->period_us;
-        }
-
-        task->runs++;
-      }
-    }
-  }
-
-  profile_finish_us = scheduler_now_us();
-  profile_elapsed_us = profile_finish_us - profile_start_us;
-
-  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
-       task_index++)
-  {
-    task_cycles += tasks[task_index].task_cycles;
-  }
-
-  task_us = task_cycles / g_cycles_per_us;
-  /* Includes polling, end checks, task DWT measurement, and runs++ counters. */
-  superloop_us = profile_elapsed_us > task_us
-                 ? profile_elapsed_us - task_us : 0ULL;
-
-  uart_print("\r\n=== SUPERLOOP SCALABILITY CLEAN ===\r\nscenario: ");
-  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
-  uart_print("\r\ntasks: ");
-  uart_print_u64(SCALABILITY_TASK_COUNT);
-  uart_print("\r\nwindow_us: ");
-  uart_print_u64(profile_elapsed_us);
-
-  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
-       task_index++)
-  {
-    Scalability_PrintTask(task_index, &tasks[task_index]);
-  }
-
-  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
-  uart_print_u64(task_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nsuperloop:\r\n  total_us: ");
-  uart_print_u64(superloop_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
-  uart_print(" %\r\n");
-
-  uart_print("CSV_SUPERLOOP_SCALE_CLEAN,SCENARIO=");
-  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
-  uart_print(",U=");
-  uart_print_u64(SCALABILITY_WORKLOAD_UTILIZATION_PERCENT);
-  uart_print(",TASKS=");
-  uart_print_u64(SCALABILITY_TASK_COUNT);
-  uart_print(",WINDOW_US=");
-  uart_print_u64(profile_elapsed_us);
-  Scalability_PrintCsvRuns(tasks);
-  uart_print(",TASK_US=");
-  uart_print_u64(task_us);
-  uart_print(",TASK_PCT=");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(",SUPERLOOP_US=");
-  uart_print_u64(superloop_us);
-  uart_print(",SUPERLOOP_PCT=");
-  uart_print_percent_x10000(superloop_us, profile_elapsed_us);
-  uart_print("\r\n");
-
-  while (1)
-  {
-  }
-}
-#endif
-
-#if EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS
-/* Diagnostic scalability profile: readiness and release DWT are intentional. */
-static void Run_Superloop_Scalability_Checks(void)
-{
-  ScalabilityTask_t tasks[SCALABILITY_TASK_COUNT];
-  uint64_t profile_start_us;
-  uint64_t profile_end_us;
-  uint64_t profile_finish_us;
-  uint64_t profile_elapsed_us;
-  uint64_t task_cycles = 0ULL;
-  uint64_t readiness_cycles = 0ULL;
-  uint64_t release_maintenance_cycles = 0ULL;
-  uint64_t check_cycles;
-  uint64_t task_us;
-  uint64_t readiness_us;
-  uint64_t release_us;
-  uint64_t checks_us;
-  uint32_t dwt_measurement_overhead_cycles;
-  uint8_t profile_finished = 0U;
-
-  dwt_measurement_overhead_cycles = Scalability_DWT_Measurement_Overhead();
-  profile_start_us = scheduler_now_us();
-  profile_end_us = profile_start_us + SCALABILITY_PROFILE_WINDOW_US;
-  Scalability_InitTasks(tasks, profile_start_us);
-
-  while (profile_finished == 0U)
-  {
-    for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
-         task_index++)
-    {
-      ScalabilityTask_t *task = &tasks[task_index];
-      uint32_t readiness_start_cycles = DWT->CYCCNT;
-      uint64_t now_us = scheduler_now_us();
-      uint8_t task_ready = (now_us >= task->next_release_us);
-      uint32_t readiness_end_cycles = DWT->CYCCNT;
-
-      readiness_cycles += Correct_DWT_Delta(
-          readiness_end_cycles - readiness_start_cycles,
-          dwt_measurement_overhead_cycles);
-
-      if ((int64_t)(now_us - profile_end_us) >= 0)
-      {
-        profile_finished = 1U;
-        break;
-      }
-
-      if (task_ready != 0U)
-      {
-        uint32_t task_start_cycles = DWT->CYCCNT;
-        Synthetic_Workload_us(task->workload_us);
-        uint32_t task_end_cycles = DWT->CYCCNT;
-        uint32_t release_start_cycles;
-        uint32_t release_end_cycles;
-        uint64_t finish_us;
-
-        task->task_cycles += Correct_DWT_Delta(
-            task_end_cycles - task_start_cycles,
-            dwt_measurement_overhead_cycles);
-
-        release_start_cycles = DWT->CYCCNT;
-        finish_us = scheduler_now_us();
-        task->next_release_us += task->period_us;
-
-        while ((int64_t)(finish_us - task->next_release_us) > 0)
-        {
-          task->next_release_us += task->period_us;
-        }
-
-        release_end_cycles = DWT->CYCCNT;
-        release_maintenance_cycles += Correct_DWT_Delta(
-            release_end_cycles - release_start_cycles,
-            dwt_measurement_overhead_cycles);
-        task->runs++;
-      }
-    }
-  }
-
-  profile_finish_us = scheduler_now_us();
-  profile_elapsed_us = profile_finish_us - profile_start_us;
-
-  for (uint32_t task_index = 0; task_index < SCALABILITY_TASK_COUNT;
-       task_index++)
-  {
-    task_cycles += tasks[task_index].task_cycles;
-  }
-
-  check_cycles = readiness_cycles + release_maintenance_cycles;
-  task_us = task_cycles / g_cycles_per_us;
-  readiness_us = readiness_cycles / g_cycles_per_us;
-  release_us = release_maintenance_cycles / g_cycles_per_us;
-  checks_us = check_cycles / g_cycles_per_us;
-
-  uart_print("\r\n=== SUPERLOOP SCALABILITY CHECKS ===\r\nscenario: ");
-  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
-  uart_print("\r\ntasks: ");
-  uart_print_u64(SCALABILITY_TASK_COUNT);
-  uart_print("\r\nwindow_us: ");
-  uart_print_u64(profile_elapsed_us);
-
-  uart_print("\r\n\r\ntask_execution:\r\n  total_us: ");
-  uart_print_u64(task_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nreadiness:\r\n  total_us: ");
-  uart_print_u64(readiness_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nrelease_maintenance:\r\n  total_us: ");
-  uart_print_u64(release_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(release_us, profile_elapsed_us);
-  uart_print(" %\r\n\r\nmeasured_checks:\r\n  total_us: ");
-  uart_print_u64(checks_us);
-  uart_print("\r\n  percent: ");
-  uart_print_percent_x10000(checks_us, profile_elapsed_us);
-  uart_print(" %\r\n");
-
-  uart_print("CSV_SUPERLOOP_SCALE_CHECKS,SCENARIO=");
-  uart_print(SCALABILITY_WORKLOAD_SCENARIO_NAME);
-  uart_print(",U=");
-  uart_print_u64(SCALABILITY_WORKLOAD_UTILIZATION_PERCENT);
-  uart_print(",TASKS=");
-  uart_print_u64(SCALABILITY_TASK_COUNT);
-  uart_print(",WINDOW_US=");
-  uart_print_u64(profile_elapsed_us);
-  Scalability_PrintCsvRuns(tasks);
-  uart_print(",TASK_US=");
-  uart_print_u64(task_us);
-  uart_print(",TASK_PCT=");
-  uart_print_percent_x10000(task_us, profile_elapsed_us);
-  uart_print(",READINESS_US=");
-  uart_print_u64(readiness_us);
-  uart_print(",READINESS_PCT=");
-  uart_print_percent_x10000(readiness_us, profile_elapsed_us);
-  uart_print(",RELEASE_US=");
-  uart_print_u64(release_us);
-  uart_print(",RELEASE_PCT=");
-  uart_print_percent_x10000(release_us, profile_elapsed_us);
-  uart_print(",CHECKS_US=");
-  uart_print_u64(checks_us);
-  uart_print(",CHECKS_PCT=");
-  uart_print_percent_x10000(checks_us, profile_elapsed_us);
-  uart_print("\r\n");
-
-  while (1)
-  {
-  }
-}
-#endif
-
 static void Tasks_Init(void)
 {
   uint64_t now_us = scheduler_now_us();
 
 	#if ENABLE_REAL_TAU1
-	  tau1.name = "tau1_hcsr04";
-	  tau1.period_us = TAU1_PERIOD_US;
-	  tau1.deadline_us = tau1.period_us;
-	  tau1.next_release_us = now_us + tau1.period_us;
-	  tau1.period_ms = TAU1_PERIOD_MS;
-	  tau1.deadline_ms = tau1.period_ms;
-	  tau1.next_release_ms = (uint32_t)(tau1.next_release_us / 1000ULL);
-	  Task_ResetStats(&tau1);
+	  Task_InitPeriodic(&tau1, "tau1_hcsr04", TAU1_PERIOD_US,
+	                    TAU1_PERIOD_MS, now_us);
 
     #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
       HCSR04_Async_Reset();
@@ -3220,14 +845,8 @@ static void Tasks_Init(void)
 	#endif
 
 	#if ENABLE_REAL_TAU2
-	  tau2.name = "tau2_dht11";
-	  tau2.period_us = TAU2_PERIOD_US;
-	  tau2.deadline_us = tau2.period_us;
-	  tau2.next_release_us = now_us + tau2.period_us;
-	  tau2.period_ms = TAU2_PERIOD_MS;
-	  tau2.deadline_ms = tau2.period_ms;
-	  tau2.next_release_ms = (uint32_t)(tau2.next_release_us / 1000ULL);
-	  Task_ResetStats(&tau2);
+	  Task_InitPeriodic(&tau2, "tau2_dht11", TAU2_PERIOD_US,
+	                    TAU2_PERIOD_MS, now_us);
 
     #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
       DHT11_Async_Reset();
@@ -3235,47 +854,23 @@ static void Tasks_Init(void)
 	#endif
 
   #if ENABLE_SYNTH_IMU
-    tau_imu.name = "tau_imu_synthetic";
-    tau_imu.period_us = TAU_IMU_PERIOD_US;
-    tau_imu.deadline_us = tau_imu.period_us;
-    tau_imu.next_release_us = now_us + tau_imu.period_us;
-    tau_imu.period_ms = TAU_IMU_PERIOD_MS;
-    tau_imu.deadline_ms = tau_imu.period_ms;
-    tau_imu.next_release_ms = (uint32_t)(tau_imu.next_release_us / 1000ULL);
-    Task_ResetStats(&tau_imu);
+    Task_InitPeriodic(&tau_imu, "tau_imu_synthetic", TAU_IMU_PERIOD_US,
+                      TAU_IMU_PERIOD_MS, now_us);
   #endif
 
 	#if ENABLE_SYNTH_LIDAR
-	  tau_lidar.name = "tau_lidar_synthetic";
-	  tau_lidar.period_us = TAU_LIDAR_PERIOD_US;
-	  tau_lidar.deadline_us = tau_lidar.period_us;
-	  tau_lidar.next_release_us = now_us + tau_lidar.period_us;
-	  tau_lidar.period_ms = TAU_LIDAR_PERIOD_MS;
-	  tau_lidar.deadline_ms = tau_lidar.period_ms;
-	  tau_lidar.next_release_ms = (uint32_t)(tau_lidar.next_release_us / 1000ULL);
-	  Task_ResetStats(&tau_lidar);
+	  Task_InitPeriodic(&tau_lidar, "tau_lidar_synthetic", TAU_LIDAR_PERIOD_US,
+	                    TAU_LIDAR_PERIOD_MS, now_us);
 	#endif
 
 	#if ENABLE_SYNTH_CAMERA
-	  tau_camera.name = "tau_camera_synthetic";
-	  tau_camera.period_us = TAU_CAMERA_PERIOD_US;
-	  tau_camera.deadline_us = tau_camera.period_us;
-	  tau_camera.next_release_us = now_us + tau_camera.period_us;
-	  tau_camera.period_ms = TAU_CAMERA_PERIOD_MS;
-	  tau_camera.deadline_ms = tau_camera.period_ms;
-	  tau_camera.next_release_ms = (uint32_t)(tau_camera.next_release_us / 1000ULL);
-	  Task_ResetStats(&tau_camera);
+	  Task_InitPeriodic(&tau_camera, "tau_camera_synthetic", TAU_CAMERA_PERIOD_US,
+	                    TAU_CAMERA_PERIOD_MS, now_us);
 	#endif
 
 	#if ENABLE_SYNTH_CONTROL
-	  tau_control.name = "tau_control_synthetic";
-	  tau_control.period_us = TAU_CONTROL_PERIOD_US;
-	  tau_control.deadline_us = tau_control.period_us;
-	  tau_control.next_release_us = now_us + tau_control.period_us;
-	  tau_control.period_ms = TAU_CONTROL_PERIOD_MS;
-	  tau_control.deadline_ms = tau_control.period_ms;
-	  tau_control.next_release_ms = (uint32_t)(tau_control.next_release_us / 1000ULL);
-	  Task_ResetStats(&tau_control);
+	  Task_InitPeriodic(&tau_control, "tau_control_synthetic", TAU_CONTROL_PERIOD_US,
+	                    TAU_CONTROL_PERIOD_MS, now_us);
 	#endif
 }
 
@@ -3309,11 +904,7 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
 
-  g_cycles_per_us = HAL_RCC_GetHCLKFreq() / 1000000U;
-  if (g_cycles_per_us == 0U)
-  {
-    g_cycles_per_us = 1U;
-  }
+  PlatformTime_Init(HAL_RCC_GetHCLKFreq() / 1000000U);
 
   /* USER CODE END SysInit */
 
@@ -3329,13 +920,13 @@ int main(void)
   DWT_Init();
 
   #if EXPERIMENT_MODE == EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE
-  Run_Minimal_Superloop_Profile();
+  MinimalSuperloopProfile_Run();
   #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_CHECKS_PROFILE
-  Run_Superloop_Checks_Profile();
+  SuperloopChecksProfile_Run();
   #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN
-  Run_Superloop_Scalability_Clean();
+  SuperloopScalabilityProfile_RunClean();
   #elif EXPERIMENT_MODE == EXPERIMENT_SUPERLOOP_SCALABILITY_CHECKS
-  Run_Superloop_Scalability_Checks();
+  SuperloopScalabilityProfile_RunChecks();
   #else
   char msg[128];
 
@@ -3358,11 +949,23 @@ int main(void)
   g_profile_start_ms = HAL_GetTick();
 
   #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_TAU1
-    Run_Isolated_Tau1_Profile();
+    IsolatedProfile_Run(&tau1, Tau1_Run,
+                        "\r\n=== ISOLATED TAU1 HC-SR04 PROFILE ===\r\n",
+                        "Only tau1 is running. No tau2. No scheduler competition.\r\n",
+                        PROFILE_WINDOW_MS,
+                        (SCHEDULER_MODE == SCHED_WFI_OPTIMIZED) ? 1U : 0U,
+                        Reset_Profiling_Stats, ProfileSamples_SaveTau1,
+                        Print_Profiling_Summary);
   #endif
 
   #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_TAU2
-    Run_Isolated_Tau2_Profile();
+    IsolatedProfile_Run(&tau2, Tau2_Run,
+                        "\r\n=== ISOLATED TAU2 DHT11 PROFILE ===\r\n",
+                        "Only tau2 is running. No tau1. No scheduler competition.\r\n",
+                        PROFILE_WINDOW_MS,
+                        (SCHEDULER_MODE == SCHED_WFI_OPTIMIZED) ? 1U : 0U,
+                        Reset_Profiling_Stats, ProfileSamples_SaveTau2,
+                        Print_Profiling_Summary);
   #endif
   #endif
 
@@ -3477,7 +1080,7 @@ int main(void)
 
 
     #if ENABLE_POLLING_PROFILE
-      Polling_UpdateStats(scheduler_cycles_this_loop);
+      CycleMetrics_Update(&g_polling_metrics, scheduler_cycles_this_loop);
     #endif
 
     uint8_t any_task_ready =
@@ -3490,7 +1093,7 @@ int main(void)
 
     if (any_task_ready)
     {
-      Scheduler_UpdateStats(scheduler_cycles_this_loop);
+      CycleMetrics_Update(&g_scheduler_metrics, scheduler_cycles_this_loop);
     }
 
 
@@ -3662,6 +1265,10 @@ int main(void)
     #elif SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
 
     sched_start_cycles = DWT->CYCCNT;
+    EdfExecutorContext_t executor_context =
+    {
+      &g_distance_cm, &g_temp, &g_hum, &g_dht_res, Task_SaveExecSample
+    };
     SchedTaskRef_t *selected_task = Scheduler_SelectChunkedEDF(g_sched_tasks,
                                                                g_sched_task_count,
                                                                now_us);
@@ -3669,13 +1276,13 @@ int main(void)
     scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
 
     #if ENABLE_POLLING_PROFILE
-      Polling_UpdateStats(scheduler_cycles_this_loop);
+      CycleMetrics_Update(&g_polling_metrics, scheduler_cycles_this_loop);
     #endif
 
     if (selected_task != NULL)
     {
-      Scheduler_UpdateStats(scheduler_cycles_this_loop);
-      Scheduler_RunChunkedTask(selected_task);
+      CycleMetrics_Update(&g_scheduler_metrics, scheduler_cycles_this_loop);
+      Scheduler_RunChunkedTask(selected_task, &executor_context);
     }
 
     #endif
@@ -3691,7 +1298,8 @@ int main(void)
 
       if (now_debug_us >= next_debug_us)
       {
-        Print_Debug_Status();
+        DebugStatus_Print(tau1.run_count, tau2.run_count, g_distance_cm,
+                          g_temp, g_hum, g_dht_res);
         next_debug_us = now_debug_us + DEBUG_PERIOD_US;
       }
     #endif

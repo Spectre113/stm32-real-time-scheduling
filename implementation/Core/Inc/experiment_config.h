@@ -6,7 +6,7 @@
  * tools/experiment_runner/run_matrix.py.
  *
  * For a manual CubeIDE build, edit the documented configuration block at the
- * top of Core/Src/main.c and keep this file unchanged.
+ * top of Core/Inc/app_config.h and keep this file unchanged.
  */
 
 #endif /* EXPERIMENT_CONFIG_H */
