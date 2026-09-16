@@ -1,11 +1,11 @@
 \documentclass[conference]{IEEEtran}
 
 \usepackage{graphicx}
-\usepackage[hidelinks]{hyperref}
 \usepackage{float}
 \usepackage{easy-todo}
 \usepackage{tabularx}
 \usepackage{array}
+\usepackage[hidelinks]{hyperref}
 
 \begin{document}
 
@@ -39,7 +39,7 @@ We propose the following contribution:
 
 \section{Background on STM32}
 \subsection{Hardware}
-The experimental platform consists of a single-core STM32 microcontroller and external sensors connected through its hardware peripherals, as shown in Fig.~\ref{fig:stm32_hw}.
+The experimental platform consists of a uniprocessor STM32F767 microcontroller and external sensors connected through its hardware peripherals, as shown in Fig.~\ref{fig:stm32_hw}.
 
 \begin{figure}[htbp]
   \centering
@@ -85,8 +85,7 @@ The hardware components are presented in Table~\ref{tab:hardware}.
 
 \subsection{Super Loop Scheduler}
 
-Let us first consider an example of a Super Loop schedule for two
-periodic tasks with implicit deadlines ($D_i = T_i$).
+Let us first consider an example of a Super Loop schedule for two periodic tasks with implicit deadlines ($D_i = T_i$).
 
 \begin{table}[H]
   \centering
@@ -102,26 +101,25 @@ periodic tasks with implicit deadlines ($D_i = T_i$).
   \end{tabular}
 \end{table}
 
-Here, $C_i$, $T_i$, and $D_i$ denote execution time, period, and relative deadline respectively.
+Here, $C_i$, $T_i$, and $D_i$ denote execution time, period and relative deadline respectively.
 
 \begin{figure}[H]
   \centering
-  \hspace*{-0.08\columnwidth}
-  \includegraphics[width=1.25\columnwidth]{SuperLoop ex.png}
+   \hspace*{-0.9cm}
+  \includegraphics[width=1.27\columnwidth]{SuperLoop ex.png}
   \caption{Super Loop execution scenario for the task set in Table~\ref{tab:superloop_tasks}.}
   \label{fig:superloop_schedule}
 \end{figure}
 
-Super Loop checks tasks sequentially in a fixed order, while each selected job executes to completion before the next task is checked.
+In the considered Super Loop implementation, ready tasks execute in a fixed order and each selected job runs to completion.
 
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
-A deadline miss is detected when $t^{cur} > R_i^k + D_i$, while a release is skipped when
-$t^{cur} > t_i^{next}$.
+Let $R_i^k$ denote the scheduled release time of job $J_i^k$ and $t_i^{next}$ the next release time tracked for task $\tau_i$. At job completion, $t^{cur}$ denotes current system time, a deadline miss is recorded if $t^{cur} > R_i^k + D_i$. Then, the value of $t_i^{next}$ is incremented by one period. If $t_i^{next} < t^{cur}$, the given release time is skipped and $t_i^{next}$ is incremented again. A release scheduled for $t_i^{next} = t^{cur}$ is retained.
 
 \begin{table}[H]
   \centering
-  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}.}
+  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}. Release times are shown after the checks at each instant.}
   \label{tab:superloop_state}
 
   \small
@@ -146,7 +144,7 @@ $t^{cur} > t_i^{next}$.
 
     20 & 50 & 0 &
     $20 < R_1^1 + 50$ &
-    $20 < R_2^2$ \\
+    $20 < R_1^2$ \\
 
     30 & 50 & 40 &
     \textbf{$30 > R_2^1 + 20$} &
@@ -167,45 +165,16 @@ $t^{cur} > t_i^{next}$.
   \end{tabularx}
 \end{table}
 
-In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$, delaying $J_2^1$ beyond its deadline. At $t=20$, $\tau_2$ reaches its next
-scheduled release time while $J_2^1$ is still pending; therefore, this release is skipped and no $J_2^2$ is created.
+In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
 
 \section{Background on EDF Real-Time Scheduling}
-Super Loop is deadline-unaware: jobs are selected according to a fixed loop order
-rather than their deadlines. As shown in Fig.~\ref{fig:superloop_schedule}, this may delay jobs beyond their deadlines and cause skipped releases.
+The Super Loop mechanism does not take deadlines into account, jobs are selected according to a fixed loop order rather than their deadlines. As shown in Fig.~\ref{fig:superloop_schedule}, this may delay jobs beyond their deadlines. The considered implementation skips releases according to the rule above.
 
-\begin{table}[H]
-  \centering
-  \caption{Super Loop and EDF scheduling principles.}
-  \label{tab:sl_edf_comparison}
-
-  \small
-  \renewcommand{\arraystretch}{1.15}
-  \begin{tabular}{lcc}
-    \hline
-    \textbf{Property} & \textbf{Super Loop} & \textbf{EDF} \\
-    \hline
-    Job selection & Fixed loop order & Earliest deadline \\
-    Deadline-aware & No & Yes \\
-    Preemption & No & Yes \\
-    \hline
-  \end{tabular}
-\end{table}
-
-EDF dynamically selects the ready job with the earliest absolute deadline.
-For a job $J_i^k$ released at $R_i^k$, its absolute deadline is
+We consider preemptive EDF, which dynamically selects the ready job with the earliest absolute deadline. For a job $J_i^k$ released at $R_i^k$, its absolute deadline is
 
 \[d_i^k = R_i^k + D_i\]
 
-If a newly released job has an earlier deadline than the running job,
-the running job is preempted.
-
-For the same task set as in Section II-B, the resulting EDF schedule is shown in Fig.~\ref{fig:edf_schedule}. Observe that, unlike Super Loop, EDF:
-\begin{itemize}
-  \item selects the ready job with the earliest absolute deadline;
-  \item preempts the running job when a job with an earlier deadline is released;
-  \item avoids the deadline miss observed under Super Loop for the considered task set.
-\end{itemize}
+If a newly released job has an earlier deadline than the running job, the running job is preempted.
 
 \section{Schedulers Implementation for STM32}
 ToDo (code?)
@@ -214,7 +183,7 @@ ToDo (code?)
 \begin{figure}[H]
   \centering
   \includegraphics[width=\columnwidth]{SuperLoop.png}
-  \caption{Super Loop deadline-miss and skipped-release ratios for a specific task under different CPU utilization ($U$) levels and task-set sizes.}
+  \caption{Per-task deadline-miss and skipped-release ratios under Super Loop. Each configuration specifies the task-set utilization $U$ and the number of tasks.}
   \label{fig:superloop_baseline}
 \end{figure}
 
