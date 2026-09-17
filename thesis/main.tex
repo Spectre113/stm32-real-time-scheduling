@@ -115,7 +115,7 @@ In the considered Super Loop implementation, ready tasks execute in a fixed orde
 
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
-Let $R_i^k$ denote the scheduled release time of job $J_i^k$ and $t_i^{next}$ the next release time tracked for task $\tau_i$. At job completion, $t^{cur}$ denotes current system time, a deadline miss is recorded if $t^{cur} > R_i^k + D_i$. Then, the value of $t_i^{next}$ is incremented by one period. If $t_i^{next} < t^{cur}$, the given release time is skipped and $t_i^{next}$ is incremented again. A release scheduled for $t_i^{next} = t^{cur}$ is retained.
+Let $R_i^k$ denote the scheduled release time of job $J_i^k$ and $t_i^{next}$ the next release time tracked for task $\tau_i$. At job completion, $t^{cur}$ denotes current system time, a deadline miss is recorded if $t^{cur} > R_i^k + D_i$. If $R_i^j < t^{cur}$, the given release time is skipped and $t_i^{next}$ is incremented again. A release scheduled for $t_i^{next} = t^{cur}$ is retained.
 
 \begin{table}[H]
   \centering
