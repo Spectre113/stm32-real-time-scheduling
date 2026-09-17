@@ -32,13 +32,20 @@
 
 \section{Introduction}
 \subsection{Contribution}
-We propose the following contribution:
+
+Our contributions are about evaluation of schedulers for STM32 microcontroller::
+%
 \begin{itemize}
-  \item Experimental evaluation and comparison of Super Loop and Earliest Deadline First on STM32.
+\item we first implement Super Loop scheduler,
+\item then we implement the Earliest-Deadline First (EDF) scheduler, and finally
+\item we evaluate their performance upon a real STM32 hardware.
 \end{itemize}
 
+
+
+
 \section{Background on STM32}
-\subsection{Hardware}
+
 The experimental platform consists of a uniprocessor STM32F767 microcontroller and external sensors connected through its hardware peripherals, as shown in Fig.~\ref{fig:stm32_hw}.
 
 \begin{figure}[htbp]
@@ -83,7 +90,32 @@ The hardware components are presented in Table~\ref{tab:hardware}.
 	\end{tabularx}
 \end{table}
 
+
+
+
+\section{System Model}
+
+\todo{AB@VT: To introduce necessary definitions and math notation. Use this notation later in Section~\ref{sec:sched_principles}.}
+
+\begin{itemize}
+\item task;
+\item task set;
+\item mode l of a schedule, including absolute release time, completion time, etc.
+\item preemption;
+\end{itemize}
+
+
+Here, $C_i$, $T_i$, and $D_i$ denote execution time, period and relative deadline respectively.
+
+
+
+
+\section{Scheduling Principles}
+\label{sec:sched_principles}
+
 \subsection{Super Loop Scheduler}
+
+\todo{AB2VT: Here describe the pseudo-code of a Super Loop scheduler.}
 
 Let us first consider an example of a Super Loop schedule for two periodic tasks with implicit deadlines ($D_i = T_i$).
 
@@ -101,15 +133,13 @@ Let us first consider an example of a Super Loop schedule for two periodic tasks
   \end{tabular}
 \end{table}
 
-Here, $C_i$, $T_i$, and $D_i$ denote execution time, period and relative deadline respectively.
 
-\begin{figure}[H]
+\begin{figure*}[tb]
   \centering
-   \hspace*{-0.9cm}
-  \includegraphics[width=1.27\columnwidth]{SuperLoop ex.png}
+  \includegraphics[width=0.55\textwidth]{SuperLoop ex.png}
   \caption{Super Loop execution scenario for the task set in Table~\ref{tab:superloop_tasks}.}
   \label{fig:superloop_schedule}
-\end{figure}
+\end{figure*}
 
 In the considered Super Loop implementation, ready tasks execute in a fixed order and each selected job runs to completion.
 
@@ -167,7 +197,14 @@ Let $R_i^k$ denote the scheduled release time of job $J_i^k$ and $t_i^{next}$ th
 
 In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
 
-\section{Background on EDF Real-Time Scheduling}
+
+
+
+
+\subsection{Earliest Deadline First}
+
+\todo{AB2VT: To describe pseudo-code of EDF}
+
 The Super Loop mechanism does not take deadlines into account, jobs are selected according to a fixed loop order rather than their deadlines. As shown in Fig.~\ref{fig:superloop_schedule}, this may delay jobs beyond their deadlines. The considered implementation skips releases according to the rule above.
 
 We consider preemptive EDF, which dynamically selects the ready job with the earliest absolute deadline. For a job $J_i^k$ released at $R_i^k$, its absolute deadline is
