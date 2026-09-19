@@ -34,16 +34,13 @@ Our contributions are about evaluation of schedulers for STM32 microcontroller:
 \item we evaluate their performance upon a real STM32 hardware.
 \end{itemize}
 
-
-
-
 \section{Background on STM32}
 
 The experimental platform consists of a uniprocessor STM32F767 microcontroller and external sensors connected through its hardware peripherals, as shown in Fig.~\ref{fig:stm32_hw}.
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.7\columnwidth]{stm32_hardware_platform.jpg}
+  \includegraphics[width=1\columnwidth]{stm32_hardware_platform.png}
   \caption{STM32 hardware platform and connected sensors.}
   \label{fig:stm32_hw}
 \end{figure}
@@ -59,9 +56,7 @@ The hardware components are presented in Table~\ref{tab:hardware}.
 	\renewcommand{\arraystretch}{1.15}
 	\setlength{\tabcolsep}{6pt}
 	
-	\begin{tabularx}{\columnwidth}{
-			l
-			>{\centering\arraybackslash}X}
+	\begin{tabularx}{\columnwidth}{l>{\centering\arraybackslash}X}
 		\hline
 		\textbf{Component} &
 		\textbf{Purpose} \\
@@ -78,6 +73,9 @@ The hardware components are presented in Table~\ref{tab:hardware}.
 		
 		OV2640 &
 		Image capturing \\
+		
+		SPW2430 & 
+		Acoustic signal acquisition \\
 		
 		\hline
 	\end{tabularx}
@@ -149,59 +147,7 @@ The resulting Super Loop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
   \label{fig:superloop_schedule}
 \end{figure*}
 
-The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
-
 Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next scheduled release time of task $\tau_i$. During execution of $J_i^j$, the release variable $t_i^{next}$ retains $R_i^j$. At completion, $f_i^j$ denotes the completion time, and a deadline miss is recorded if $f_i^j>d_i^j$. The scheduler then advances $t_i^{next}$ by $T_i$. While $t_i^{next}<f_i^j$, the scheduled release at $t_i^{next}$ is counted as skipped and $t_i^{next}$ is advanced by $T_i$ again. A release at $t_i^{next}=f_i^j$ is retained.
-
-\begin{table}[H]
-  \centering
-  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}. Release times are shown after the checks at each instant.}
-  \label{tab:superloop_state}
-
-  \small
-  \renewcommand{\arraystretch}{1.2}
-  \setlength{\tabcolsep}{3pt}
-
-  \begin{tabularx}{\columnwidth}{
-    c c c
-    >{\centering\arraybackslash}X
-    >{\centering\arraybackslash}X}
-    \hline
-    $t^{cur}$ &
-    $t_1^{next}$ &
-    $t_2^{next}$ &
-    Deadline miss check &
-    Release skip check \\
-    \hline
-
-    0 & 0 & 0 &
-    -- &
-    -- \\
-
-    20 & 50 & 0 &
-    $20 < R_1^1 + 50$ &
-    $20 < R_1^2$ \\
-
-    30 & 50 & 40 &
-    \textbf{$30 > R_2^1 + 20$} &
-    \begin{tabular}{c}
-      \textbf{$30 > R_2^2$} \\
-      $30 < R_2^3$
-    \end{tabular} \\
-
-    40 & 50 & 40 &
-    -- &
-    -- \\
-
-    50 & 50 & 60 &
-    $50 < R_2^3 + 20$ &
-    $50 < R_2^4$ \\
-
-    \hline
-  \end{tabularx}
-\end{table}
-
-In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
 
 The scheduling logic illustrated in Fig.~\ref{fig:superloop_schedule} is summarized in Algorithm~\ref{alg:superloop}.
 
@@ -252,6 +198,58 @@ The scheduling logic illustrated in Fig.~\ref{fig:superloop_schedule} is summari
 		
 	\end{algorithmic}
 \end{algorithm}
+
+The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
+
+\begin{table}[H]
+  \centering
+  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}. Release times are shown after the checks at each instant.}
+  \label{tab:superloop_state}
+
+  \small
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{3pt}
+
+  \begin{tabularx}{\columnwidth}{
+    c c c
+    >{\centering\arraybackslash}X
+    >{\centering\arraybackslash}X}
+    \hline
+    $t^{cur}$ &
+    $t_1^{next}$ &
+    $t_2^{next}$ &
+    Deadline miss check &
+    Release skip check \\
+    \hline
+
+    0 & 0 & 0 &
+    -- &
+    -- \\
+
+    20 & 50 & 0 &
+    $20 < R_1^1 + 50$ &
+    $20 < R_1^2$ \\
+
+    30 & 50 & 40 &
+    \textbf{$30 > R_2^1 + 20$} &
+    \begin{tabular}{c}
+      \textbf{$30 > R_2^2$} \\
+      $30 < R_2^3$
+    \end{tabular} \\
+
+    40 & 50 & 40 &
+    -- &
+    -- \\
+
+    50 & 50 & 60 &
+    $50 < R_2^3 + 20$ &
+    $50 < R_2^4$ \\
+
+    \hline
+  \end{tabularx}
+\end{table}
+
+In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
 
 \subsection{Earliest Deadline First}
 
