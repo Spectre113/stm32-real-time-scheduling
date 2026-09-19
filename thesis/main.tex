@@ -8,6 +8,7 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{placeins}
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
@@ -40,7 +41,7 @@ The experimental platform consists of a uniprocessor STM32F767 microcontroller a
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=1\columnwidth]{stm32_hardware_platform.png}
+  \includegraphics[width=0.9\columnwidth]{stm32_hardware_platform.png}
   \caption{STM32 hardware platform and connected sensors.}
   \label{fig:stm32_hw}
 \end{figure}
@@ -122,7 +123,7 @@ Table~\ref{tab:system_model} summarizes the notation. Release indices include sk
 \label{sec:sched_principles}
 
 \subsection{Super Loop Scheduler}
-The considered Super Loop scheduler repeatedly scans tasks in a fixed order and executes each selected job non-preemptively. To illustrate its behavior, let us consider the two periodic tasks in Table~\ref{tab:superloop_tasks}.
+The considered Super Loop scheduler repeatedly scans tasks in a fixed order and executes each selected job non-preemptively. To illustrate its behavior, let us consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
 
 \begin{table}[H]
   \centering
@@ -142,68 +143,20 @@ The resulting Super Loop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 
 \begin{figure*}[tb]
   \centering
-  \includegraphics[width=0.8\textwidth]{superloop_execution_schedule.png}
+  \includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
   \caption{Super Loop execution scenario for the task set in Table~\ref{tab:superloop_tasks}.}
   \label{fig:superloop_schedule}
 \end{figure*}
 
 Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next scheduled release time of task $\tau_i$. During execution of $J_i^j$, the release variable $t_i^{next}$ retains $R_i^j$. At completion, $f_i^j$ denotes the completion time, and a deadline miss is recorded if $f_i^j>d_i^j$. The scheduler then advances $t_i^{next}$ by $T_i$. While $t_i^{next}<f_i^j$, the scheduled release at $t_i^{next}$ is counted as skipped and $t_i^{next}$ is advanced by $T_i$ again. A release at $t_i^{next}=f_i^j$ is retained.
 
-The scheduling logic illustrated in Fig.~\ref{fig:superloop_schedule} is summarized in Algorithm~\ref{alg:superloop}.
-
-\begin{algorithm}[t]
-	\caption{Super Loop Scheduler}
-	\label{alg:superloop}
-	\begin{algorithmic}[1]
-		
-		\Function{SuperLoop}{$\mathcal{T}$}
-		
-		\ForAll{$\tau_i \in \mathcal{T}$}
-		\State $t_i^{next} \gets 0$
-		\EndFor
-		
-		\While{true}
-		
-		\For{$i \gets 1$ to $n$}
-		\Comment{Fixed task order}
-		
-		\State $t^{cur} \gets \Call{Now}{}$
-		
-		\If{$t^{cur} \geq t_i^{next}$}
-		
-		\State $R_i^j \gets t_i^{next}$
-		\State \Call{Execute}{$J_i^j$}
-		\Comment{Non-preemptive}
-		
-		\State $f_i^j \gets \Call{Now}{}$
-		
-		\If{$f_i^j > R_i^j + D_i$}
-		\State \Call{RecordMiss}{$J_i^j$}
-		\EndIf
-		
-		\State $t_i^{next} \gets t_i^{next} + T_i$
-		
-		\While{$t_i^{next} < f_i^j$}
-		\State \Call{RecordSkip}{$t_i^{next}$}
-		\State $t_i^{next} \gets t_i^{next} + T_i$
-		\EndWhile
-		
-		\EndIf
-		
-		\EndFor
-		
-		\EndWhile
-		
-		\EndFunction
-		
-	\end{algorithmic}
-\end{algorithm}
+Algorithm~\ref{alg:superloop} summarizes the illustrated scheduling logic. Since $R_i^1=0$, the release index is $j=1+t_i^{next}/T_i$, including skipped releases. The clock used by \textsc{Now} starts at zero.
 
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
 \begin{table}[H]
   \centering
-  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}. Release times are shown after the checks at each instant.}
+  \caption{Super Loop scheduling state for Fig.~\ref{fig:superloop_schedule}.}
   \label{tab:superloop_state}
 
   \small
@@ -251,22 +204,71 @@ The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
 In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
 
+\begin{algorithm}[!t]
+	\caption{Super Loop Scheduler}
+	\label{alg:superloop}
+	\begin{algorithmic}[1]
+		
+		\Function{SuperLoop}{$\mathcal{T}$}
+		
+		\ForAll{$\tau_i \in \mathcal{T}$}
+		\State $t_i^{next} \gets 0$
+		\EndFor
+		
+		\While{true}
+		
+		\For{$i \gets 1$ to $n$}
+		\Comment{Fixed task order}
+		
+		\State $t^{cur} \gets \Call{Now}{}$
+		
+		\If{$t^{cur} \geq t_i^{next}$}
+		
+		\State $j \gets 1+t_i^{next}/T_i$
+		\State $R_i^j \gets t_i^{next}$
+		\State \Call{Execute}{$J_i^j$}
+		\Comment{Non-preemptive}
+		
+		\State $f_i^j \gets \Call{Now}{}$
+		
+		\If{$f_i^j > R_i^j + D_i$}
+		\State \Call{RecordMiss}{$J_i^j$}
+		\EndIf
+		
+		\State $t_i^{next} \gets t_i^{next} + T_i$
+		
+		\While{$t_i^{next} < f_i^j$}
+		\State \Call{RecordSkip}{$\tau_i, t_i^{next}$}
+		\State $t_i^{next} \gets t_i^{next} + T_i$
+		\EndWhile
+		
+		\EndIf
+		
+		\EndFor
+		
+		\EndWhile
+		
+		\EndFunction
+		
+	\end{algorithmic}
+\end{algorithm}
+
 \subsection{Earliest Deadline First}
 
 \todo{AB2VT: To describe pseudo-code of EDF}
 
 The Super Loop mechanism does not take deadlines into account, jobs are selected according to a fixed loop order rather than their deadlines. As shown in Fig.~\ref{fig:superloop_schedule}, this may delay jobs beyond their deadlines. The considered implementation skips releases according to the rule above.
 
-We consider preemptive EDF, which dynamically selects the ready job with the earliest absolute deadline $d_i^j$ (Section~\ref{sec:system_model}).
+ We consider preemptive EDF, which dynamically selects the ready job with the earliest absolute deadline $d_i^j$ (Section~\ref{sec:system_model}).
 
-If a newly released job has an earlier deadline than the running job, the running job is preempted.
+ If a newly released job has an earlier deadline than the running job, the running job is preempted.
 
-\section{Performance Evaluation}
-\begin{figure}[H]
+ \section{Performance Evaluation}
+ \begin{figure}[H]
   \centering
   \includegraphics[width=\columnwidth]{superloop_performance_results.png}
   \caption{Per-task deadline-miss and skipped-release ratios under Super Loop. Each configuration specifies the task-set utilization $U$ and the number of tasks.}
   \label{fig:superloop_baseline}
-\end{figure}
+ \end{figure}
 
 \end{document}
