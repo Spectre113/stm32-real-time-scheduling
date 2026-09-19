@@ -85,7 +85,7 @@ The hardware components are presented in Table~\ref{tab:hardware}.
 \section{System Model}
 \label{sec:system_model}
 
-We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ executed on a uniprocessor. We consider only implicit deadlines, i.e., $D_i=T_i$. Each task $\tau_i=(C_i,T_i=D_i)$ generates a sequence of jobs $J_i^j$, where $j$ denotes the scheduled release index. Consecutive scheduled releases satisfy $R_i^{j+1}=R_i^j+T_i$.
+We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ executed on a uniprocessor. We consider only implicit deadlines, i.e, $D_i=T_i$. Each task $\tau_i=(C_i,T_i=D_i)$ generates a sequence of jobs $J_i^j$, where $j$ denotes the scheduled release index. Consecutive scheduled releases satisfy $R_i^{j+1}=R_i^j+T_i$.
 
 \begin{table}[htbp]
   \centering
@@ -114,8 +114,8 @@ We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\t
 Table~\ref{tab:system_model} summarizes the notation. Release indices include skipped activations, for which no completion time is defined.
 
 \begin{itemize}
-  \item A \emph{schedule} specifies which job executes on the processor at each time instant, or whether the processor executes no job.
-  \item \emph{Preemption} interrupts a job before completion to execute another job. The interrupted job may resume later.
+  \item A schedule specifies which job executes on the processor at each time instant, or whether the processor executes no job.
+  \item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
   \item A completed job $J_i^j$ has missed its deadline if $f_i^j>d_i^j$.
 \end{itemize}
 
