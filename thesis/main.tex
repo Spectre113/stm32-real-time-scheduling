@@ -6,34 +6,27 @@
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage[hidelinks]{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
 \begin{document}
 
 \title{Experimental Evaluation and Optimization of
   Real-Time Scheduling on STM32}
 \author{
-  \IEEEauthorblockN{Vladimir Toporkov}
-  \IEEEauthorblockA{
-    \textit{Computer Science and Engineering} \\
-    \textit{Innopolis University} \\
-    Innopolis, Russia \\
-    v.toporkov@innopolis.university
-  }
-  \and
-  \IEEEauthorblockN{Artem Burmyakov}
-  \IEEEauthorblockA{
-    \textit{Institute of Information Security} \\
-    \textit{Innopolis University} \\
-    Innopolis, Russia \\
-    a.burmyakov@innopolis.ru
-  }
+	\IEEEauthorblockN{Vladimir Toporkov, Artem Burmyakov}
+	\IEEEauthorblockA{
+		\textit{Innopolis University}
+	}
 }
 \maketitle
 
 \section{Introduction}
 \subsection{Contribution}
 
-Our contributions are about evaluation of schedulers for STM32 microcontroller::
+Our contributions are about evaluation of schedulers for STM32 microcontroller:
 %
 \begin{itemize}
 \item we first implement Super Loop scheduler,
@@ -50,7 +43,7 @@ The experimental platform consists of a uniprocessor STM32F767 microcontroller a
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.7\columnwidth]{STM32_HW.jpg}
+  \includegraphics[width=0.7\columnwidth]{stm32_hardware_platform.jpg}
   \caption{STM32 hardware platform and connected sensors.}
   \label{fig:stm32_hw}
 \end{figure}
@@ -90,34 +83,48 @@ The hardware components are presented in Table~\ref{tab:hardware}.
 	\end{tabularx}
 \end{table}
 
-
-
-
 \section{System Model}
+\label{sec:system_model}
 
-\todo{AB@VT: To introduce necessary definitions and math notation. Use this notation later in Section~\ref{sec:sched_principles}.}
+We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ executed on a uniprocessor. We consider only implicit deadlines, i.e., $D_i=T_i$. Each task $\tau_i=(C_i,T_i=D_i)$ generates a sequence of jobs $J_i^j$, where $j$ denotes the scheduled release index. Consecutive scheduled releases satisfy $R_i^{j+1}=R_i^j+T_i$.
+
+\begin{table}[htbp]
+  \centering
+  \caption{System model notation.}
+  \label{tab:system_model}
+  \small
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabularx}{\columnwidth}{l >{\raggedright\arraybackslash}X}
+    \hline
+    \textbf{Symbol} & \textbf{Meaning} \\
+    \hline
+    $\mathcal{T}, n$ & Task set and number of tasks \\
+    $\tau_i$ & Task $i$ \\
+    $C_i$ & Execution time of a job of $\tau_i$ \\
+    $T_i$ & Task period \\
+    $D_i=T_i$ & Relative deadline, equal to the period \\
+    $J_i^j$ & Job associated with the $j$-th scheduled release of $\tau_i$ \\
+    $R_i^j$ & Scheduled release time \\
+    $f_i^j$ & Completion time of an executed job \\
+    $d_i^j=R_i^j+D_i$ & Absolute deadline \\
+    $U=\sum_{i=1}^{n} C_i/T_i$ & Task-set utilization \\
+    \hline
+  \end{tabularx}
+\end{table}
+
+Table~\ref{tab:system_model} summarizes the notation. Release indices include skipped activations, for which no completion time is defined.
 
 \begin{itemize}
-\item task;
-\item task set;
-\item mode l of a schedule, including absolute release time, completion time, etc.
-\item preemption;
+  \item A \emph{schedule} specifies which job executes on the processor at each time instant, or whether the processor executes no job.
+  \item \emph{Preemption} interrupts a job before completion to execute another job. The interrupted job may resume later.
+  \item A completed job $J_i^j$ has missed its deadline if $f_i^j>d_i^j$.
 \end{itemize}
-
-
-Here, $C_i$, $T_i$, and $D_i$ denote execution time, period and relative deadline respectively.
-
-
-
 
 \section{Scheduling Principles}
 \label{sec:sched_principles}
 
 \subsection{Super Loop Scheduler}
-
-\todo{AB2VT: Here describe the pseudo-code of a Super Loop scheduler.}
-
-Let us first consider an example of a Super Loop schedule for two periodic tasks with implicit deadlines ($D_i = T_i$).
+The considered Super Loop scheduler repeatedly scans tasks in a fixed order and executes each selected job non-preemptively. To illustrate its behavior, let us consider the two periodic tasks in Table~\ref{tab:superloop_tasks}.
 
 \begin{table}[H]
   \centering
@@ -133,19 +140,18 @@ Let us first consider an example of a Super Loop schedule for two periodic tasks
   \end{tabular}
 \end{table}
 
+The resulting Super Loop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 
 \begin{figure*}[tb]
   \centering
-  \includegraphics[width=0.55\textwidth]{SuperLoop ex.png}
+  \includegraphics[width=0.8\textwidth]{superloop_execution_schedule.png}
   \caption{Super Loop execution scenario for the task set in Table~\ref{tab:superloop_tasks}.}
   \label{fig:superloop_schedule}
 \end{figure*}
 
-In the considered Super Loop implementation, ready tasks execute in a fixed order and each selected job runs to completion.
-
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
-Let $R_i^k$ denote the scheduled release time of job $J_i^k$ and $t_i^{next}$ the next release time tracked for task $\tau_i$. At job completion, $t^{cur}$ denotes current system time, a deadline miss is recorded if $t^{cur} > R_i^k + D_i$. If $R_i^j < t^{cur}$, the given release time is skipped and $t_i^{next}$ is incremented again. A release scheduled for $t_i^{next} = t^{cur}$ is retained.
+Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next scheduled release time of task $\tau_i$. During execution of $J_i^j$, the release variable $t_i^{next}$ retains $R_i^j$. At completion, $t^{cur}=f_i^j$, and a deadline miss is recorded if $f_i^j>d_i^j$. The scheduler then advances $t_i^{next}$ by $T_i$. While $t_i^{next}<t^{cur}$, that release is counted as skipped and $t_i^{next}$ is advanced by $T_i$ again. A release at $t_i^{next}=t^{cur}$ is retained.
 
 \begin{table}[H]
   \centering
@@ -197,9 +203,55 @@ Let $R_i^k$ denote the scheduled release time of job $J_i^k$ and $t_i^{next}$ th
 
 In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
 
+The scheduling logic illustrated in Fig.~\ref{fig:superloop_schedule} is summarized in Algorithm~\ref{alg:superloop}.
 
-
-
+\begin{algorithm}[t]
+	\caption{Super Loop Scheduler}
+	\label{alg:superloop}
+	\begin{algorithmic}[1]
+		
+		\Function{SuperLoop}{$\mathcal{T}$}
+		
+		\ForAll{$\tau_i \in \mathcal{T}$}
+		\State $t_i^{next} \gets 0$
+		\EndFor
+		
+		\While{true}
+		
+		\For{$i \gets 1$ to $n$}
+		\Comment{Fixed task order}
+		
+		\State $t^{cur} \gets \Call{Now}{}$
+		
+		\If{$t^{cur} \geq t_i^{next}$}
+		
+		\State $R_i^j \gets t_i^{next}$
+		\State \Call{Execute}{$J_i^j$}
+		\Comment{Non-preemptive}
+		
+		\State $f_i^j \gets \Call{Now}{}$
+		
+		\If{$f_i^j > R_i^j + D_i$}
+		\State \Call{RecordMiss}{$J_i^j$}
+		\EndIf
+		
+		\State $t_i^{next} \gets t_i^{next} + T_i$
+		
+		\While{$t_i^{next} < f_i^j$}
+		\State \Call{RecordSkip}{$t_i^{next}$}
+		\State $t_i^{next} \gets t_i^{next} + T_i$
+		\EndWhile
+		
+		\EndIf
+		
+		\EndFor
+		
+		\EndWhile
+		
+		\EndFunction
+		
+	\end{algorithmic}
+\end{algorithm}
 
 \subsection{Earliest Deadline First}
 
@@ -207,19 +259,14 @@ In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. The
 
 The Super Loop mechanism does not take deadlines into account, jobs are selected according to a fixed loop order rather than their deadlines. As shown in Fig.~\ref{fig:superloop_schedule}, this may delay jobs beyond their deadlines. The considered implementation skips releases according to the rule above.
 
-We consider preemptive EDF, which dynamically selects the ready job with the earliest absolute deadline. For a job $J_i^k$ released at $R_i^k$, its absolute deadline is
-
-\[d_i^k = R_i^k + D_i\]
+We consider preemptive EDF, which dynamically selects the ready job with the earliest absolute deadline $d_i^j$ (Section~\ref{sec:system_model}).
 
 If a newly released job has an earlier deadline than the running job, the running job is preempted.
-
-\section{Schedulers Implementation for STM32}
-ToDo (code?)
 
 \section{Performance Evaluation}
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\columnwidth]{SuperLoop.png}
+  \includegraphics[width=\columnwidth]{superloop_performance_results.png}
   \caption{Per-task deadline-miss and skipped-release ratios under Super Loop. Each configuration specifies the task-set utilization $U$ and the number of tasks.}
   \label{fig:superloop_baseline}
 \end{figure}
