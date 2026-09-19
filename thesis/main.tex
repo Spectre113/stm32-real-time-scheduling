@@ -151,7 +151,7 @@ The resulting Super Loop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
-Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next scheduled release time of task $\tau_i$. During execution of $J_i^j$, the release variable $t_i^{next}$ retains $R_i^j$. At completion, $t^{cur}=f_i^j$, and a deadline miss is recorded if $f_i^j>d_i^j$. The scheduler then advances $t_i^{next}$ by $T_i$. While $t_i^{next}<t^{cur}$, that release is counted as skipped and $t_i^{next}$ is advanced by $T_i$ again. A release at $t_i^{next}=t^{cur}$ is retained.
+Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next scheduled release time of task $\tau_i$. During execution of $J_i^j$, the release variable $t_i^{next}$ retains $R_i^j$. At completion, $f_i^j$ denotes the completion time, and a deadline miss is recorded if $f_i^j>d_i^j$. The scheduler then advances $t_i^{next}$ by $T_i$. While $t_i^{next}<f_i^j$, the scheduled release at $t_i^{next}$ is counted as skipped and $t_i^{next}$ is advanced by $T_i$ again. A release at $t_i^{next}=f_i^j$ is retained.
 
 \begin{table}[H]
   \centering
