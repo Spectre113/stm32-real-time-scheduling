@@ -273,7 +273,7 @@ At $t=20$, $J_2^2$ is released with $d_2^2=40<d_1^1=50$ and preempts $J_1^1$. Af
 
 The implementation on STM32 approximates preemption using fixed-size execution chunks. A running job may therefore be preempted only after the current chunk completes. Consequently, an earlier-deadline job can experience a bounded preemption delay.
 
-In Fig.~\ref{fig:chunked_edf}, $J_2^2$ is released while $J_1^1$ is executing its current chunk. Although $J_2^2$ has the earlier absolute deadline, preemption occurs only at the end of the current chunk.
+In Fig.~\ref{fig:chunked_edf}, $J_2^2$ is released while $J_1^1$ is executing its current chunk. Although $J_2^2$ has the earlier absolute deadline, preemption occurs only at the end of the chunk.
 
 \begin{figure*}[!b]
 	\centering
