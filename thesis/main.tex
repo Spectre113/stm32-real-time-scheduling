@@ -255,33 +255,38 @@ In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. The
 \end{algorithm}
 
 \subsection{Earliest Deadline First}
-Unlike Super Loop, Earliest Deadline First (EDF) selects jobs according to their absolute deadlines.
+\label{EDF_subsection}
+
+Unlike Super Loop, Earliest Deadline First (EDF) selects jobs according
+to their absolute deadlines.
 
 We first consider preemptive EDF with immediate preemption. At each scheduling decision, the ready job with the earliest absolute deadline $d_i^j$ is selected (Section~\ref{sec:system_model}). If a newly released job has an earlier absolute deadline than the running job, it preempts the running job.
 
-Figure~\ref{fig:edf_schedule} illustrates EDF scheduling for the same task set. Both tasks first release at $t=0$.
+Figure~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table~\ref{tab:superloop_tasks}.
 
 \begin{figure*}[!t]
 	\centering
 	\includegraphics[width=0.9\textwidth]{edf_execution_schedule.png}
-	\caption{EDF execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Hatching indicates a preempted job awaiting resumption.}
+	\caption{EDF execution scenario for the task set in
+		Table~\ref{tab:superloop_tasks}. Hatching indicates a preempted
+		job awaiting resumption.}
 	\label{fig:edf_schedule}
 \end{figure*}
 
 At $t=20$, $J_2^2$ is released with $d_2^2=40<d_1^1=50$ and preempts $J_1^1$. After $J_2^2$ completes at $t=30$, $J_1^1$ resumes and completes at $t=40$.
 
-The implementation on STM32 approximates preemption using fixed-size execution chunks. A running job may therefore be preempted only after the current chunk completes. Consequently, an earlier-deadline job can experience a bounded preemption delay.
+The STM32 implementation approximates preemption using execution chunks of maximum duration $\Delta$. Scheduling decisions are made only at chunk boundaries. Therefore, an earlier-deadline job released during a chunk may wait until the current chunk completes.
 
-In Fig.~\ref{fig:chunked_edf}, $J_2^2$ is released while $J_1^1$ is executing its current chunk. Although $J_2^2$ has the earlier absolute deadline, preemption occurs only at the end of the chunk.
+In Fig.~\ref{fig:chunked_edf}, $J_1^1$ executes a chunk from $t=19$ ms to $t=22$ ms. Job $J_2^2$ is released at $t=20$ ms, but the scheduler recheck the ready jobs only at $t=22$ ms. Since $J_2^2$ has the earlier absolute deadline, it is selected at the next chunk boundary.
 
 \begin{figure*}[!b]
 	\centering
-	\includegraphics[width=0.7\textwidth]{chunked_edf_execution_schedule.png}
+	\includegraphics[width=0.75\textwidth]{chunked_edf_execution_schedule.png}
 	\caption{Chunk-bounded preemption in the EDF implementation.}
 	\label{fig:chunked_edf}
 \end{figure*}
 
-In the considered implementation, preemption is deferred until the current execution chunk completes. In Fig.~\ref{fig:chunked_edf}, this results in a preemption delay of $\delta=2$ ms.
+The resulting preemption delay is $\delta=2$ ms. In general, $0 \leq \delta < \Delta$.
 
 \section{Performance Evaluation}
  \begin{figure}[H]
