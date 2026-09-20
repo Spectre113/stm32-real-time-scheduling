@@ -261,11 +261,10 @@ We first consider preemptive EDF with immediate preemption. At each scheduling d
 
 Figure~\ref{fig:edf_schedule} illustrates EDF scheduling for the same task set. Both tasks first release at $t=0$.
 
-\begin{figure*}[!b]
+\begin{figure*}[!t]
 	\centering
 	\includegraphics[width=0.9\textwidth]{edf_execution_schedule.png}
-	\caption{EDF execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Hatching indicates a preempted
-		job awaiting resumption.}
+	\caption{EDF execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Hatching indicates a preempted job awaiting resumption.}
 	\label{fig:edf_schedule}
 \end{figure*}
 
@@ -277,7 +276,7 @@ In Fig.~\ref{fig:chunked_edf}, $J_2^2$ is released while $J_1^1$ is executing it
 
 \begin{figure*}[!b]
 	\centering
-	\includegraphics[width=0.8\textwidth]{chunked_edf_execution_schedule.png}
+	\includegraphics[width=0.7\textwidth]{chunked_edf_execution_schedule.png}
 	\caption{Chunk-bounded preemption in the EDF implementation.}
 	\label{fig:chunked_edf}
 \end{figure*}
