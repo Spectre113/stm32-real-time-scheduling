@@ -275,9 +275,9 @@ Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table
 
 At $t=20$, $J_2^2$ is released with $d_2^2=40<d_1^1=50$ and preempts $J_1^1$. After $J_2^2$ completes at $t=30$, $J_1^1$ resumes and completes at $t=40$.
 
-The STM32 implementation approximates preemption using execution chunks of maximum duration $\Delta$. Scheduling decisions are made only at chunk boundaries. Therefore, an earlier-deadline job released during a chunk may wait until the current chunk completes.
+In the STM32 implementation, synthetic jobs execute in chunks of maximum duration $\Delta$, with job selection repeated after each chunk. An earlier-deadline job released during a chunk may therefore wait until the chunk completes. Sensor jobs use separate staged handlers.
 
-In Fig.~\ref{fig:chunked_edf}, $J_1^1$ executes a chunk from $t=18$ ms to $t=22$ ms. Job $J_2^2$ is released at $t=20$ ms, but the scheduler rechecks the ready jobs only at $t=22$ ms. Since $J_2^2$ has the earlier absolute deadline, it is selected at the next chunk boundary.
+For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_2^2$ is released at $t=20$ ms and preempts $J_1^1$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_2^2$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
 
 \begin{figure*}[!b]
 	\centering
@@ -286,9 +286,9 @@ In Fig.~\ref{fig:chunked_edf}, $J_1^1$ executes a chunk from $t=18$ ms to $t=22$
 	\label{fig:chunked_edf}
 \end{figure*}
 
-The resulting preemption delay is $\delta=2$ ms. In general, $0 \leq \delta < \Delta$.
+Ignoring scheduling overhead, the delay until the next chunk boundary satisfies $0 \leq \delta \leq \Delta$.
 
-Let $\mathcal{R}$ denote the set of ready jobs. Algorithm~\ref{alg:chunked_edf} summarizes the implemented Chunked EDF logic, where job selection is repeated after each execution chunk.
+Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assuming first releases at $t=0$ as in the example. The set $\mathcal{R}$ contains jobs admitted for execution but not yet completed. The flag $active_i$ is true while a job of $\tau_i$ belongs to $\mathcal{R}$, including before its first execution. Equal deadlines are resolved by task order. \textsc{ExecuteChunk} executes at most $\Delta$ of the selected job's remaining execution and preserves its progress.
 
 \begin{algorithm}[!t]
 	\caption{Chunked EDF Scheduler}
@@ -296,6 +296,7 @@ Let $\mathcal{R}$ denote the set of ready jobs. Algorithm~\ref{alg:chunked_edf} 
 	\begin{algorithmic}[1]
 		
 		\Function{ChunkedEDF}{$\mathcal{T}, \Delta$}
+		\State $\mathcal{R} \gets \emptyset$
 		
 		\ForAll{$\tau_i \in \mathcal{T}$}
 		\State $t_i^{next} \gets 0$
@@ -311,15 +312,14 @@ Let $\mathcal{R}$ denote the set of ready jobs. Algorithm~\ref{alg:chunked_edf} 
 		\State $j \gets 1+t_i^{next}/T_i$
 		\State $R_i^j \gets t_i^{next}$
 		\State $d_i^j \gets R_i^j+D_i$
+		\State $\mathcal{R} \gets \mathcal{R} \cup \{J_i^j\}$
 		\State $active_i \gets true$
 		\EndIf
 		\EndFor
 		
-		\State $J_i^j \gets
-		\arg\min\limits_{J_k^l \in \mathcal{R}} d_k^l$
+		\If{$\mathcal{R} \neq \emptyset$}
+		\State $J_i^j \gets \Call{SelectEDF}{\mathcal{R}}$
 		\Comment{Earliest deadline}
-		
-		\If{$J_i^j \neq \emptyset$}
 		
 		\State \Call{ExecuteChunk}{$J_i^j,\Delta$}
 		
@@ -338,6 +338,7 @@ Let $\mathcal{R}$ denote the set of ready jobs. Algorithm~\ref{alg:chunked_edf} 
 		\State $t_i^{next} \gets t_i^{next}+T_i$
 		\EndWhile
 		
+		\State $\mathcal{R} \gets \mathcal{R} \setminus \{J_i^j\}$
 		\State $active_i \gets false$
 		
 		\EndIf
