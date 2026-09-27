@@ -3,6 +3,18 @@
 
 #include <stdio.h>
 
+/* newlib-nano may not support printf's long-long conversion. */
+static void FormatU64(char text[21], uint64_t value)
+{
+  unsigned length = 0;
+  do { text[length++] = (char)('0' + value % 10ULL); value /= 10ULL; } while (value);
+  text[length] = '\0';
+  for (unsigned i = 0; i < length / 2; ++i)
+  {
+    char c = text[i]; text[i] = text[length - 1 - i]; text[length - 1 - i] = c;
+  }
+}
+
 void TaskReporting_PrintExecHistogram(const char *title, const Task_t *task)
 {
   char msg[128];
@@ -36,6 +48,9 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
   unsigned pending = task->job_active || snapshot_us >= release_us;
   uint64_t pending_age_us = pending ? snapshot_us - release_us : 0ULL;
   unsigned pending_overdue = pending && pending_age_us > task->deadline_us;
+  char pending_age_text[21], pending_exec_text[21];
+  FormatU64(pending_age_text, pending_age_us);
+  FormatU64(pending_exec_text, task->accumulated_exec_us);
   uint64_t exec_avg_us = 0U;
   uint64_t response_avg_us = 0U;
 
@@ -46,7 +61,7 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
   }
 
   snprintf(msg, sizeof(msg),
-           "CSV_TASK,SCHED=%s,SCENARIO=%s,U=%lu,TASK=%s,RUNS=%lu,C_US=%lu,T_MS=%lu,D_MS=%lu,EXEC_AVG_US=%lu,RESP_AVG_US=%lu,RESP_MAX_US=%lu,MISSES=%lu,SKIPPED=%lu,FAILURES=%lu,MAX_LATENESS_US=%lu,PENDING=%u,PENDING_OVERDUE=%u,PENDING_AGE_US=%llu,PENDING_EXEC_US=%llu\r\n",
+           "CSV_TASK,SCHED=%s,SCENARIO=%s,U=%lu,TASK=%s,RUNS=%lu,C_US=%lu,T_MS=%lu,D_MS=%lu,EXEC_AVG_US=%lu,RESP_AVG_US=%lu,RESP_MAX_US=%lu,MISSES=%lu,SKIPPED=%lu,FAILURES=%lu,MAX_LATENESS_US=%lu,PENDING=%u,PENDING_OVERDUE=%u,PENDING_AGE_US=%s,PENDING_EXEC_US=%s\r\n",
            scheduler_name, scenario_name, (unsigned long)utilization_percent,
            task_label, (unsigned long)task->run_count,
            (unsigned long)workload_us, (unsigned long)task->period_ms,
@@ -57,7 +72,6 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
            (unsigned long)task->skipped_release_count,
            (unsigned long)task->total_timing_failures,
            (unsigned long)task->max_lateness_us,
-           pending, pending_overdue, (unsigned long long)pending_age_us,
-           (unsigned long long)task->accumulated_exec_us);
+           pending, pending_overdue, pending_age_text, pending_exec_text);
   uart_print(msg);
 }

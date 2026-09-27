@@ -1,6 +1,7 @@
 # Build output
 Debug/
 Release/
+analysis/
 
 # Common STM32CubeIDE generated files
 *.o

@@ -37,5 +37,10 @@ int main(void)
   report(&task, 15000);
   assert(strstr(output, "RESP_AVG_US=6000"));
   assert(strstr(output, "PENDING=0,PENDING_OVERDUE=0"));
+  task.job_active = 1;
+  task.active_release_us = 0;
+  task.accumulated_exec_us = UINT64_MAX;
+  report(&task, UINT64_MAX);
+  assert(strstr(output, "PENDING_AGE_US=18446744073709551615,PENDING_EXEC_US=18446744073709551615"));
   puts("reporting boundary tests passed");
 }
