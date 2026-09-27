@@ -19,7 +19,7 @@
     3
   ],
   "repeats": 3,
-  "scheduler_algorithm": "SCHED_ALGO_SUPERLOOP",
+  "scheduler_algorithm": "SCHED_ALGO_CHUNKED_EDF",
   "edf_chunk_us": 1000,
   "build_configuration": "Release",
   "stlink_frequency_khz": 4000,

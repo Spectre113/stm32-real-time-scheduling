@@ -1,8 +1,10 @@
 #include "profile_samples.h"
+#include "app_config.h"
 #include "app_uart.h"
 
 #include <stdio.h>
 
+#if ENABLE_EXTENDED_STATS
 #define TAU1_MAX_SAMPLES 700U
 #define TAU2_MAX_SAMPLES 50U
 
@@ -55,3 +57,10 @@ void ProfileSamples_Print(void)
   ProfileSamples_PrintList(g_tau2_exec_samples, g_tau2_sample_count);
   uart_print("\r\n");
 }
+
+#else
+void ProfileSamples_Reset(void) {}
+void ProfileSamples_SaveTau1(uint64_t exec_time_us) { (void)exec_time_us; }
+void ProfileSamples_SaveTau2(uint64_t exec_time_us) { (void)exec_time_us; }
+void ProfileSamples_Print(void) {}
+#endif

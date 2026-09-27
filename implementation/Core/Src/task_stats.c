@@ -1,4 +1,5 @@
 #include "task_stats.h"
+#include "app_config.h"
 
 void Task_ResetStats(Task_t *task)
 {
@@ -42,6 +43,7 @@ void Task_UpdateExecStats(Task_t *task, uint64_t exec_us)
 {
   task->total_exec_us += exec_us;
 
+  #if ENABLE_EXTENDED_STATS
   if (task->run_count == 1U)
   {
     task->min_exec_us = exec_us;
@@ -54,6 +56,7 @@ void Task_UpdateExecStats(Task_t *task, uint64_t exec_us)
   }
 
   Task_UpdateExecHistogram(task, exec_us);
+  #endif
 }
 
 void Task_CheckDeadline(Task_t *task, uint64_t response_time_us)
@@ -77,12 +80,16 @@ void Task_UpdateResponseStats(Task_t *task, uint64_t response_us)
 
   if (task->run_count == 1U)
   {
+    #if ENABLE_EXTENDED_STATS
     task->min_response_us = response_us;
+    #endif
     task->max_response_us = response_us;
   }
   else
   {
+    #if ENABLE_EXTENDED_STATS
     if (response_us < task->min_response_us) task->min_response_us = response_us;
+    #endif
     if (response_us > task->max_response_us) task->max_response_us = response_us;
   }
 }

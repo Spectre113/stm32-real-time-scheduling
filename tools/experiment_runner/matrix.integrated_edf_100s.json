@@ -1,15 +1,11 @@
 {
   "scenarios": [
     "U50",
-    "U65",
-    "U75",
-    "U80",
     "U90",
-    "U95",
     "U100"
   ],
   "windows_us": [
-    60000000
+    100000000
   ],
   "modes": [
     "integrated"
@@ -19,7 +15,7 @@
     3
   ],
   "repeats": 3,
-  "scheduler_algorithm": "SCHED_ALGO_SUPERLOOP",
+  "scheduler_algorithm": "SCHED_ALGO_CHUNKED_EDF",
   "edf_chunk_us": 1000,
   "build_configuration": "Release",
   "stlink_frequency_khz": 4000,

@@ -98,3 +98,19 @@ Copy `matrix.default.json`, keep the required scenarios, windows, and modes, the
 ```
 
 For each run, the script temporarily rewrites [`implementation/Core/Inc/experiment_config.h`](../../implementation/Core/Inc/experiment_config.h). It restores the original file even after an error or `Ctrl+C`. After a forced PC shutdown, check that file with `git diff` before a manual build.
+
+### Integrated measurement boundary
+
+The integrated profile produces one measurement per reset, then waits for reset/reflash. The runner already reflashes each configuration. Task rows share a cutoff timestamp taken before UART output. `PENDING` identifies the released but unfinished tracked job (including one not started yet); `PENDING_OVERDUE` indicates a strictly exceeded deadline at cutoff. `PENDING_AGE_US` is its age since release and `PENDING_EXEC_US` is its measured execution so far. These describe the tracked job, not later releases awaiting skip accounting. `MISSES` and response statistics remain completion-only; report unfinished jobs separately. `TASK_EXEC` includes partial execution of unfinished jobs.
+
+### Updated integrated matrices
+
+The current comparison supersedes the old 24-run integrated campaign. `matrix.integrated_stats.json` and `matrix.integrated_edf.json` contain 42 runs each: 60 s, seven loads U50/U65/U75/U80/U90/U95/U100, 2/3 tasks, three repeats. Their `_100s.json` counterparts contain 18 runs each at U50/U90/U100. Total: 120 runs, 144 measurement minutes, all Release, EDF chunk 1000 us. Use a fresh output directory per matrix.
+
+`extended_stats: false` retains completion/miss/skip counts, response sum/max, execution totals, scheduler/polling sums and counts, and unfinished-job fields. Histograms, stored samples, execution/cycle extrema and response minimum are disabled. Use `extended_stats: true` (manual build: `ENABLE_EXTENDED_STATS=1`) for separate diagnostic runs. EXTENDED_STATS is recorded and checked by the runner. Other profiles retain extended statistics.
+
+### EDF chunk-size sweep
+
+`matrix.integrated_edf_chunk2ms.json` and `matrix.integrated_edf_chunk4ms.json` use 2000/4000 us chunks. Each has 18 runs: U50/U90/U100, 2/3 tasks, 60 s, three repeats, Release, compact statistics. Total additional measurement time is 36 minutes, excluding builds/flashes. Pass either file with `--matrix` and the usual port/builder/programmer arguments; add `--dry-run` to check without hardware.
+
+Use a fresh output directory per matrix (the default creates one); run_key does not include chunk size. Reuse the U50/U90/U100 subset of the main 1 ms EDF campaign only with matching sources/settings. Identify chunk size using summary.csv CHUNK_US and the saved matrix.json; join task rows to run rows within their campaign. Compare per-task response times, misses/skips, overhead and pending jobs. This sweep does not directly measure preemption delay.

@@ -101,6 +101,7 @@ SUMMARY_FIELDS = [
     "SYNTH_TASKS",
     "SCHED",
     "CHUNK_US",
+    "EXTENDED_STATS",
     "SCHED_LOOPS",
     "SCHED_OVH",
     "POLL_LOOPS",
@@ -134,6 +135,10 @@ INTEGRATED_TASK_SUMMARY_FIELDS = [
     "SKIPPED",
     "FAILURES",
     "MAX_LATENESS_US",
+    "PENDING",
+    "PENDING_OVERDUE",
+    "PENDING_AGE_US",
+    "PENDING_EXEC_US",
     "device_csv",
 ]
 
@@ -209,6 +214,8 @@ def load_matrix(path: Path) -> dict[str, Any]:
         raise SystemExit("edf_chunk_us must be positive")
     if int(matrix.get("repeats", 1)) < 1:
         raise SystemExit("Matrix field 'repeats' must be at least 1.")
+    if type(matrix.get("extended_stats", False)) is not bool:
+        raise SystemExit("extended_stats must be true or false")
     return matrix
 
 
@@ -264,6 +271,7 @@ def render_config(spec: RunSpec, matrix: dict[str, Any]) -> str:
 #define ENABLE_SYNTH_LIDAR 1
 #define ENABLE_SYNTH_CONTROL 0
 #define ENABLE_DEBUG_PRINT 0
+#define ENABLE_EXTENDED_STATS {int(matrix.get("extended_stats", False)) if spec.mode in INTEGRATED_MODES else 1}
 #define ENABLE_POLLING_PROFILE 1
 #define SCHEDULER_MODE SCHED_BUSY_POLLING
 
@@ -361,6 +369,8 @@ def validate_device_result(spec: RunSpec, device_result: dict[str, str], matrix:
             raise ValueError("Device scheduler/chunk does not match requested configuration")
         if device_result.get("REQUESTED_WINDOW_US") != str(spec.window_us):
             raise ValueError("Device requested window does not match configuration")
+        if device_result.get("EXTENDED_STATS") != str(int(matrix.get("extended_stats", False))):
+            raise ValueError("Device statistics mode does not match configuration")
         if device_result.get("REAL_TASKS") != "0":
             raise ValueError("Synthetic campaign must have physical sensors disabled")
     if spec.mode in INTEGRATED_MODES and device_result.get("SYNTH_TASKS") != str(spec.task_count):

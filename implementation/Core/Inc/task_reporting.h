@@ -9,6 +9,6 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
                                 uint32_t utilization_percent,
                                 const char *task_label,
                                 const Task_t *task,
-                                uint64_t workload_us);
+                                uint64_t workload_us, uint64_t snapshot_us);
 
 #endif /* TASK_REPORTING_H */

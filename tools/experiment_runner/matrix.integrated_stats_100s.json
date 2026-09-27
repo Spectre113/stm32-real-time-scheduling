@@ -1,15 +1,11 @@
 {
   "scenarios": [
     "U50",
-    "U65",
-    "U75",
-    "U80",
     "U90",
-    "U95",
     "U100"
   ],
   "windows_us": [
-    60000000
+    100000000
   ],
   "modes": [
     "integrated"

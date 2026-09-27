@@ -103,6 +103,14 @@
   #define ENABLE_POLLING_PROFILE 1
 #endif
 
+/* Compact paper metrics by default in integrated experiments. */
+#ifndef ENABLE_EXTENDED_STATS
+  #define ENABLE_EXTENDED_STATS (EXPERIMENT_MODE != EXPERIMENT_INTEGRATED)
+#endif
+#if (ENABLE_EXTENDED_STATS != 0) && (ENABLE_EXTENDED_STATS != 1)
+  #error "ENABLE_EXTENDED_STATS must be 0 or 1"
+#endif
+
 #ifndef SCHEDULER_MODE
   #define SCHEDULER_MODE SCHED_BUSY_POLLING
 #endif

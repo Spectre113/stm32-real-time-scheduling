@@ -274,7 +274,8 @@ static void Print_Profiling_Summary(void)
 {
   char msg[512];
   /* Snapshot before UART output; finish the current Superloop iteration. */
-  uint64_t measured_window_us = scheduler_now_us() - g_profile_start_us;
+  uint64_t snapshot_us = scheduler_now_us();
+  uint64_t measured_window_us = snapshot_us - g_profile_start_us;
   if (measured_window_us == 0ULL) measured_window_us = 1ULL;
 
   uint64_t tau1_avg_exec = 0;
@@ -379,27 +380,27 @@ static void Print_Profiling_Summary(void)
   task_exec_total_us = 0;
 
 	#if ENABLE_REAL_TAU1
-	  task_exec_total_us += tau1.total_exec_us;
+	  task_exec_total_us += tau1.total_exec_us + tau1.accumulated_exec_us;
 	#endif
 
 	#if ENABLE_REAL_TAU2
-	  task_exec_total_us += tau2.total_exec_us;
+	  task_exec_total_us += tau2.total_exec_us + tau2.accumulated_exec_us;
 	#endif
 
   #if ENABLE_SYNTH_IMU
-    task_exec_total_us += tau_imu.total_exec_us;
+    task_exec_total_us += tau_imu.total_exec_us + tau_imu.accumulated_exec_us;
   #endif
 
   #if ENABLE_SYNTH_LIDAR
-    task_exec_total_us += tau_lidar.total_exec_us;
+    task_exec_total_us += tau_lidar.total_exec_us + tau_lidar.accumulated_exec_us;
   #endif
 
 	#if ENABLE_SYNTH_CAMERA
-		task_exec_total_us += tau_camera.total_exec_us;
+		task_exec_total_us += tau_camera.total_exec_us + tau_camera.accumulated_exec_us;
 	#endif
 
 	#if ENABLE_SYNTH_CONTROL
-	  task_exec_total_us += tau_control.total_exec_us;
+	  task_exec_total_us += tau_control.total_exec_us + tau_control.accumulated_exec_us;
 	#endif
 
   task_exec_percent_x10000 = (task_exec_total_us * 1000000ULL) / measured_window_us;
@@ -426,6 +427,7 @@ static void Print_Profiling_Summary(void)
   logical_idle_percent_x10000 = (logical_idle_us * 1000000ULL) / measured_window_us;
   measured_busy_percent_x10000 = (measured_busy_us * 1000000ULL) / measured_window_us;
 
+  #if ENABLE_EXTENDED_STATS
   snprintf(msg, sizeof(msg),
            "\r\n=== PROFILING SUMMARY %lu s ===\r\n",
            (unsigned long)(PROFILE_WINDOW_US / 1000000ULL));
@@ -782,10 +784,12 @@ static void Print_Profiling_Summary(void)
   uart_print(msg);
 #endif
 
-  /* ProfileSamples_Print(); */
+  ProfileSamples_Print();
+  #endif
 
   snprintf(msg, sizeof(msg),
-           "CSV_RUN,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,REQUESTED_WINDOW_US=%lu,SYNTH_U_X10000=%lu,REAL_TASKS=%u,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
+           "CSV_RUN,EXTENDED_STATS=%u,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,REQUESTED_WINDOW_US=%lu,SYNTH_U_X10000=%lu,REAL_TASKS=%u,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
+           (unsigned int)ENABLE_EXTENDED_STATS,
            SCHED_ALGO_NAME,
            WORKLOAD_SCENARIO_NAME,
            (unsigned long)WORKLOAD_UTILIZATION_PERCENT,
@@ -812,25 +816,25 @@ static void Print_Profiling_Summary(void)
   #if ENABLE_SYNTH_IMU
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
                                WORKLOAD_UTILIZATION_PERCENT, "IMU", &tau_imu,
-                               TAU_IMU_WORKLOAD_US);
+                               TAU_IMU_WORKLOAD_US, snapshot_us);
   #endif
 
   #if ENABLE_SYNTH_LIDAR
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
                                WORKLOAD_UTILIZATION_PERCENT, "LIDAR", &tau_lidar,
-                               TAU_LIDAR_WORKLOAD_US);
+                               TAU_LIDAR_WORKLOAD_US, snapshot_us);
   #endif
 
   #if ENABLE_SYNTH_CAMERA
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
                                WORKLOAD_UTILIZATION_PERCENT, "CAMERA", &tau_camera,
-                               TAU_CAMERA_WORKLOAD_US);
+                               TAU_CAMERA_WORKLOAD_US, snapshot_us);
   #endif
 
   #if ENABLE_SYNTH_CONTROL
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
                                WORKLOAD_UTILIZATION_PERCENT, "CONTROL", &tau_control,
-                               TAU_CONTROL_WORKLOAD_US);
+                               TAU_CONTROL_WORKLOAD_US, snapshot_us);
   #endif
 
   uart_print("=======================================\r\n\r\n");
@@ -1321,6 +1325,12 @@ int main(void)
     if ((profile_now_us - g_profile_start_us) >= PROFILE_WINDOW_US)
     {
       Print_Profiling_Summary();
+
+      #if EXPERIMENT_MODE == EXPERIMENT_INTEGRATED
+        /* One independent measurement per reset. Preserve unfinished jobs;
+         * UART reporting must not become part of a subsequent measurement. */
+        while (1) { __WFI(); }
+      #endif
 
       Reset_Profiling_Stats();
 

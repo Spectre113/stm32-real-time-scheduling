@@ -28,9 +28,14 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
                                 uint32_t utilization_percent,
                                 const char *task_label,
                                 const Task_t *task,
-                                uint64_t workload_us)
+                                uint64_t workload_us, uint64_t snapshot_us)
 {
-  char msg[384];
+  char msg[640];
+  /* Pending refers to the tracked job, not later releases awaiting skip accounting. */
+  uint64_t release_us = task->job_active ? task->active_release_us : task->next_release_us;
+  unsigned pending = task->job_active || snapshot_us >= release_us;
+  uint64_t pending_age_us = pending ? snapshot_us - release_us : 0ULL;
+  unsigned pending_overdue = pending && pending_age_us > task->deadline_us;
   uint64_t exec_avg_us = 0U;
   uint64_t response_avg_us = 0U;
 
@@ -41,7 +46,7 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
   }
 
   snprintf(msg, sizeof(msg),
-           "CSV_TASK,SCHED=%s,SCENARIO=%s,U=%lu,TASK=%s,RUNS=%lu,C_US=%lu,T_MS=%lu,D_MS=%lu,EXEC_AVG_US=%lu,RESP_AVG_US=%lu,RESP_MAX_US=%lu,MISSES=%lu,SKIPPED=%lu,FAILURES=%lu,MAX_LATENESS_US=%lu\r\n",
+           "CSV_TASK,SCHED=%s,SCENARIO=%s,U=%lu,TASK=%s,RUNS=%lu,C_US=%lu,T_MS=%lu,D_MS=%lu,EXEC_AVG_US=%lu,RESP_AVG_US=%lu,RESP_MAX_US=%lu,MISSES=%lu,SKIPPED=%lu,FAILURES=%lu,MAX_LATENESS_US=%lu,PENDING=%u,PENDING_OVERDUE=%u,PENDING_AGE_US=%llu,PENDING_EXEC_US=%llu\r\n",
            scheduler_name, scenario_name, (unsigned long)utilization_percent,
            task_label, (unsigned long)task->run_count,
            (unsigned long)workload_us, (unsigned long)task->period_ms,
@@ -51,6 +56,8 @@ void TaskReporting_PrintCsvTask(const char *scheduler_name,
            (unsigned long)task->deadline_miss_count,
            (unsigned long)task->skipped_release_count,
            (unsigned long)task->total_timing_failures,
-           (unsigned long)task->max_lateness_us);
+           (unsigned long)task->max_lateness_us,
+           pending, pending_overdue, (unsigned long long)pending_age_us,
+           (unsigned long long)task->accumulated_exec_us);
   uart_print(msg);
 }
