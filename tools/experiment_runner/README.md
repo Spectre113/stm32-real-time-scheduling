@@ -1,116 +1,59 @@
-# Automated Superloop Profile Collection
+# Automated Super Loop and chunked EDF experiments
 
 [Русская версия](README.ru.md)
 
-`run_matrix.py` runs an experiment matrix without PuTTY. For every run, it changes the firmware configuration, builds the project, flashes the board through ST-LINK, reads UART, and stores the result.
+`run_matrix.py` configures, builds, flashes, captures UART, and saves CSV for each run. See the [root README](../../README.md) for research scope and the [configuration reference](../../docs/configuration.md) for firmware parameters and metric definitions.
 
-## One-time setup
+## Setup and execution
 
-1. STM32CubeIDE with STM32Cube FW F7.
-2. STM32CubeProgrammer.
-3. Python 3.10 or later and the UART dependency:
-
-   ```powershell
-   py -m pip install -r tools\experiment_runner\requirements.txt
-   ```
-
-Locate the two executables. Typical Windows locations are:
-
-```text
-C:\ST\STM32CubeIDE_<version>\STM32CubeIDE\headless-build.bat
-C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe
-```
-
-Close STM32CubeIDE if it is using the same workspace, and close PuTTY: the script needs exclusive access to the COM port.
-
-## Full run
-
-Connect the `NUCLEO-F767ZI`, find its ST-LINK Virtual COM Port number, then run this command from the repository root:
+Install STM32CubeIDE with STM32Cube FW F7, STM32CubeProgrammer, and Python 3.10+. Install the dependency with `py -m pip install -r tools/experiment_runner/requirements.txt`. Close any terminal using the COM port and CubeIDE if it uses the same workspace. Run from the repository root, replacing the tool paths with your installation paths:
 
 ```powershell
 py tools\experiment_runner\run_matrix.py `
-  --port COM5 `
-  --headless-builder "C:\ST\STM32CubeIDE_<version>\STM32CubeIDE\headless-build.bat" `
-  --programmer "C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe"
-```
-
-`matrix.default.json` defines 84 runs: `U50`-`U100`, windows of 10/30/60/100/250/500/1000 seconds, and the `clean` and `checks` modes. The measurement windows alone take 390 minutes; allow additional time for 84 builds and flashes.
-
-### Separate scalability run
-
-`matrix.scalability.json` is deliberately separate from the default matrix. It runs exactly 12 measurements: task counts 2/3/4, scenarios `U65` and `U90`, 60-second windows, and `scale_clean`/`scale_checks` modes. It does not repeat or modify the 84-run campaign.
-
-```powershell
-py tools\experiment_runner\run_matrix.py `
-  --port COM5 `
-  --headless-builder "C:\path\headless-build.bat" `
-  --programmer "C:\path\STM32_Programmer_CLI.exe" `
-  --matrix tools\experiment_runner\matrix.scalability.json
-```
-
-The measurement windows take 12 minutes in total; allow a few extra minutes for builds and flashes. Run it without `--output-dir` to create a new results directory and a separate `summary.csv`.
-
-### Separate integrated-statistics run
-
-`matrix.integrated_stats.json` is another independent campaign for the original full-statistics integrated Superloop profile. It runs `U50`, `U75`, `U90`, and `U100`; 2 and 3 synthetic tasks; and 30/60/100-second windows: 24 measurements in total.
-
-```powershell
-py tools\experiment_runner\run_matrix.py `
-  --port COM5 `
+  --port COM3 `
   --headless-builder "C:\path\headless-build.bat" `
   --programmer "C:\path\STM32_Programmer_CLI.exe" `
   --matrix tools\experiment_runner\matrix.integrated_stats.json
 ```
 
-The measurement windows take 25.3 minutes in total. In addition to `summary.csv`, this campaign writes `task_summary.csv` with the complete per-task execution, response-time, deadline, and skipped-release CSV rows. The 2-task configuration uses IMU and LiDAR, with their 3:4 relative workload split re-normalized to the selected total utilization.
+Add `--dry-run` to validate the plan without builds or hardware access. Flashing connects under hardware reset (`mode=UR`, `reset=HWrst`) with up to three attempts for recognized ST-LINK connection errors. Other failures are not retried.
 
-For a safe check without touching the board:
+## Integrated matrices
 
-```powershell
-py tools\experiment_runner\run_matrix.py --port COM5 --headless-builder C:\path\headless-build.bat --programmer C:\path\STM32_Programmer_CLI.exe --dry-run
-```
+| Matrix | Scheduler | Window, s | Chunk, ms | Runs |
+| --- | --- | ---: | ---: | ---: |
+| `matrix.integrated_stats.json` | Super Loop | 60 | - | 42 |
+| `matrix.integrated_edf.json` | EDF | 60 | 1 | 42 |
+| `matrix.integrated_stats_100s.json` | Super Loop | 100 | - | 18 |
+| `matrix.integrated_edf_100s.json` | EDF | 100 | 1 | 18 |
+| `matrix.integrated_edf_chunk2ms.json` | EDF | 60 | 2 | 18 |
+| `matrix.integrated_edf_chunk4ms.json` | EDF | 60 | 4 | 18 |
 
-## Results
+The main 60 s series uses U50/U65/U75/U80/U90/U95/U100. The 100 s and 2/4 ms series use U50/U90/U100. All use 2/3 tasks, three repeats, Release, disabled sensors, and `extended_stats: false`. Total: 156 runs and 180 measurement minutes, excluding builds/flashes.
 
-Every campaign creates its own `results/<UTC timestamp>/` directory:
+Run matrices sequentially in separate fresh output directories. Reuse the matching subset of the main 1 ms EDF campaign for the chunk sweep only with identical sources/settings. This sweep does not directly measure preemption delay.
 
-- `summary.csv` - one table with requested and reported parameters for all runs;
-- `task_summary.csv` - all `CSV_TASK` rows from integrated-statistics runs;
-- `raw/*.log` - the complete UART log of each run;
-- `build/*.log` and `build/*.flash.log` - build and flashing logs;
-- `matrix.json` - the exact matrix used for the campaign.
+For diagnostics, copy a matrix and set `extended_stats: true`. The runner records and validates `EXTENDED_STATS`. Do not pool diagnostic and compact runs, or old Debug runs with Release results.
 
-The temporary STM32CubeIDE headless workspace is created outside the repository and is not placed in the results directory.
+## Other profiles
 
-All result files are ignored by Git. A failed run is still written to `summary.csv` with `status=failed` and an error message. To continue the same campaign without repeating successful runs, use `--output-dir <directory> --resume`.
+- `matrix.default.json`: 84 clean/checks runs, U50/U65/U80/U90/U95/U100, windows 10/30/60/100/250/500/1000 s; 390 measurement minutes.
+- `matrix.scalability.json`: 12 scale_clean/scale_checks runs, U65/U90, 2/3/4 tasks, 60 s; 12 minutes.
 
-## Changing the matrix
+Omitting `--matrix` selects `matrix.default.json`, not integrated. These separate profiles execute Super Loop regardless of `scheduler_algorithm`; use integrated for EDF. Integrated supports 2/3 tasks. Customize a copy of the relevant matrix. Firmware-supported scenarios may differ from runner-supported scenarios (U110 is not yet accepted by the runner).
 
-Copy `matrix.default.json`, keep the required scenarios, windows, and modes, then pass it with `--matrix`. For `scale_clean` or `scale_checks`, also provide `task_counts` containing only `2`, `3`, and/or `4`. For example, a short test of one mode:
+## Results and resume
 
-```json
-{
-  "scenarios": ["U65"],
-  "windows_us": [10000000],
-  "modes": ["clean"],
-  "repeats": 1
-}
-```
+Each campaign creates `results/<UTC timestamp>/`:
 
-For each run, the script temporarily rewrites [`implementation/Core/Inc/experiment_config.h`](../../implementation/Core/Inc/experiment_config.h). It restores the original file even after an error or `Ctrl+C`. After a forced PC shutdown, check that file with `git diff` before a manual build.
+- `summary.csv`: run parameters, status, and measurements;
+- `task_summary.csv`: integrated task rows;
+- `raw/*.log`: UART output;
+- `build/*.log`, `build/*.flash.log`, `build/*.flash.attemptN.log`: build and flashing attempts;
+- `matrix.json` and `manifest.json`: configuration and source fingerprint.
 
-### Integrated measurement boundary
+Results are ignored by Git. run_key is unique within a campaign but omits scheduler/chunk: join tables using campaign directory plus run_key. Read chunk size from summary.csv CHUNK_US. See the [configuration reference](../../docs/configuration.md) for CSV semantics and unfinished-job accounting.
 
-The integrated profile produces one measurement per reset, then waits for reset/reflash. The runner already reflashes each configuration. Task rows share a cutoff timestamp taken before UART output. `PENDING` identifies the released but unfinished tracked job (including one not started yet); `PENDING_OVERDUE` indicates a strictly exceeded deadline at cutoff. `PENDING_AGE_US` is its age since release and `PENDING_EXEC_US` is its measured execution so far. These describe the tracked job, not later releases awaiting skip accounting. `MISSES` and response statistics remain completion-only; report unfinished jobs separately. `TASK_EXEC` includes partial execution of unfinished jobs.
+Resume with the same matrix and `--output-dir <directory> --resume`. Successful runs are skipped and failures retried; old failed rows remain. Analyze successful unique runs. Resume requires the same matrix and source fingerprint, including the runner; use a new campaign on mismatch rather than editing the manifest.
 
-### Updated integrated matrices
-
-The current comparison supersedes the old 24-run integrated campaign. `matrix.integrated_stats.json` and `matrix.integrated_edf.json` contain 42 runs each: 60 s, seven loads U50/U65/U75/U80/U90/U95/U100, 2/3 tasks, three repeats. Their `_100s.json` counterparts contain 18 runs each at U50/U90/U100. Total: 120 runs, 144 measurement minutes, all Release, EDF chunk 1000 us. Use a fresh output directory per matrix.
-
-`extended_stats: false` retains completion/miss/skip counts, response sum/max, execution totals, scheduler/polling sums and counts, and unfinished-job fields. Histograms, stored samples, execution/cycle extrema and response minimum are disabled. Use `extended_stats: true` (manual build: `ENABLE_EXTENDED_STATS=1`) for separate diagnostic runs. EXTENDED_STATS is recorded and checked by the runner. Other profiles retain extended statistics.
-
-### EDF chunk-size sweep
-
-`matrix.integrated_edf_chunk2ms.json` and `matrix.integrated_edf_chunk4ms.json` use 2000/4000 us chunks. Each has 18 runs: U50/U90/U100, 2/3 tasks, 60 s, three repeats, Release, compact statistics. Total additional measurement time is 36 minutes, excluding builds/flashes. Pass either file with `--matrix` and the usual port/builder/programmer arguments; add `--dry-run` to check without hardware.
-
-Use a fresh output directory per matrix (the default creates one); run_key does not include chunk size. Reuse the U50/U90/U100 subset of the main 1 ms EDF campaign only with matching sources/settings. Identify chunk size using summary.csv CHUNK_US and the saved matrix.json; join task rows to run rows within their campaign. Compare per-task response times, misses/skips, overhead and pending jobs. This sweep does not directly measure preemption delay.
+The runner temporarily writes experiment_config.h and restores its original contents on normal exit, errors, and Ctrl+C. Check the file after forcibly terminating the process. The temporary CubeIDE workspace is outside the repository.

@@ -21,7 +21,7 @@ startup-код, инициализацию периферии, linker-интег
 | --- | --- | --- |
 | Точка входа | `Src/main.c` | CubeMX user sections, запуск периферии, объекты задач, верхнеуровневый цикл планировщика и app-specific UART summary adapter. |
 | Время и UART | `platform_time.*`, `app_uart.*` | Настройка DWT, микросекундная шкала времени, синтетическая работа и форматирование UART. |
-| Датчики | `hcsr04.*`, `dht11.*` | Блокирующий доступ Superloop и неблокирующие state machine Chunked EDF. |
+| Датчики | `hcsr04.*`, `dht11.*` | Блокирующий доступ Super Loop и поэтапные обработчики датчиков chunked EDF. |
 | Планирование | `edf_selector.*`, `edf_executor.*`, `scheduler_release.*`, `scheduler_types.h` | EDF-выбор/исполнение, обслуживание release и общие типы планировщика. |
 | Измерения | `task_stats.*`, `cycle_metrics.*`, `profile_samples.*`, `task_reporting.*` | Статистика времени задач, cycle-агрегаты, выборки, histogram и CSV. |
 | Режимы экспериментов | `isolated_profile.*`, `minimal_superloop_profile.*`, `superloop_checks_profile.*`, `superloop_scalability_profile.*` | Изолированные, чистые, диагностические и scalability-профили. |
@@ -35,3 +35,5 @@ CODE END` в файлах, которыми управляет CubeMX, напр�
 
 После генерации соберите проект и убедитесь, что include-файлы в секции `USER
 CODE` файла `main.c` сохранились.
+
+Параметры статистики и смысл CSV определены в [справочнике](../../docs/configuration.ru.md).

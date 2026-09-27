@@ -1,13 +1,15 @@
-# Real-Time Scheduler Demonstration on STM32F767
+# Experimental Scheduler Comparison on STM32F767
 
 [Русская версия](README.ru.md)
 
-STM32CubeIDE project for evaluating two cooperative real-time scheduling approaches on an `STM32F767ZITx`:
+STM32CubeIDE experimental platform for comparing Super Loop and chunked EDF on an `STM32F767ZITx`. The study examines how workload utilization, task-set composition, and chunk size affect response time, deadline misses, skipped releases, and scheduler overhead.
+
+Two scheduling approaches are implemented:
 
 - **Superloop** - fixed, non-preemptive execution order.
-- **Chunked EDF** - synthetic work is split into cooperative chunks and the earliest-deadline task is selected again after each chunk.
+- **Chunked EDF** - synthetic jobs execute in cooperative chunks, after each chunk, the ready job with the earliest absolute deadline is selected.
 
-The firmware runs periodic synthetic and physical-sensor tasks, measures timing characteristics, and prints reports and CSV rows through UART. It is intended for reproducible experiments, not as a production scheduler.
+The current experiment series uses periodic synthetic tasks with controlled workloads. HC-SR04 and DHT11 support is implemented separately, synthetic results do not validate physical-sensor behavior. Firmware reports through UART, and the automated runner saves configurations, logs, and CSV data for reproducible comparisons.
 
 ## Requirements
 
@@ -26,7 +28,7 @@ HC-SR04 and DHT11 are optional. The default manual configuration enables them, s
 4. Open the ST-LINK Virtual COM Port in a terminal before starting firmware: `115200`, `8N1`, no parity, no flow control.
 5. Click `Run` or `Debug`. STM32CubeIDE flashes the board and starts the program.
 
-If no COM port appears, reconnect the board and update the ST-LINK driver. The project uses `USART3` (`PD8` TX, `PD9` RX); see [`implementation/demonstration.ioc`](implementation/demonstration.ioc).
+If no COM port appears, reconnect the board and update the ST-LINK driver. The project uses `USART3` (`PD8` TX, `PD9` RX), see [`implementation/demonstration.ioc`](implementation/demonstration.ioc).
 
 ## Configure and run an experiment
 
@@ -45,35 +47,41 @@ The [firmware source map](implementation/Core/README.md) shows where the configu
 The two scheduling paths differ in an important way:
 
 - In Superloop, HC-SR04 and DHT11 use blocking baseline transactions.
-- In Chunked EDF, each sensor exposes waiting as a non-runnable state, allowing other ready work to execute. HC-SR04 uses EXTI for ECHO edges; DHT11 has a scheduler-visible 30 ms start-low wait.
+- In Chunked EDF, each sensor exposes waiting as a non-runnable state, allowing other ready work to execute. HC-SR04 uses EXTI for ECHO edges, DHT11 has a scheduler-visible 30 ms start-low wait.
 
 The [sensor guide](docs/sensors.md) documents both state machines, wiring-related pin assignments, and short hardware smoke tests.
 
-UART output is emitted only after a profiling window. Save the reported CSV line for analysis; if the terminal was opened too late, restart the board because the result may already have been printed.
+The integrated profile measures one window per reset, prints its report through UART, then waits for reset or reflash. Unfinished jobs are reported separately. If the terminal was opened too late, reset the board.
+
+Integrated mode defaults to compact research statistics. `ENABLE_EXTENDED_STATS=1` enables diagnostic histograms, execution samples, and auxiliary min/max values. Automated matrices use `extended_stats: true` for the same setting. Keep diagnostic and compact measurements separate.
 
 ## Automated experiment series
 
-[`tools/experiment_runner/`](tools/experiment_runner/) can build, flash, capture UART, and aggregate CSV rows for an entire experiment matrix. It preserves the manual switches in `app_config.h`, writes per-run logs plus `results/<timestamp>/summary.csv`, and keeps generated results outside Git.
+[`tools/experiment_runner/`](tools/experiment_runner/) can build, flash, capture UART, and aggregate CSV rows for an entire experiment matrix. It preserves the manual switches in `app_config.h`, writes logs, campaign configuration, and CSV tables under `results/<timestamp>/`, and keeps generated results outside Git. `summary.csv` holds run-level measurements, `task_summary.csv` holds per-task measurements.
+
+The campaigns compare schedulers, 60/100 s windows, and EDF chunks of 1/2/4 ms. The automation guide below owns the full matrix inventory and run conditions.
+
+Measurements include completed jobs, deadline misses, skipped releases, mean and maximum observed response time, execution time, and scheduler/polling overhead. The unfinished tracked job is reported with its age, execution so far, and overdue status at cutoff. Response statistics and `MISSES` cover completed jobs. Overhead metrics describe instrumented code regions, not total CPU utilization.
 
 See the [automation guide](tools/experiment_runner/README.md) for setup, matrices, and commands.
 
 ## Documentation
 
-| Document | Contents |
-| --- | --- |
-| [Configuration reference](docs/configuration.md) | Workloads, experiment modes, macros, synthetic tasks, and interpretation of profiling output. |
-| [Sensor guide](docs/sensors.md) | HC-SR04 and DHT11 behavior in Superloop and Chunked EDF, pins, and smoke tests. |
-| [Automation guide](tools/experiment_runner/README.md) | Batch experiment collection on Windows. |
-| [Project documents](docs/README.md) | Maintained Google Slides presentation and Google Colab analysis notebook. |
+| Document                                              | Contents                                                                                      |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [Configuration reference](docs/configuration.md)      | Workloads, experiment modes, macros, synthetic tasks, and interpretation of profiling output. |
+| [Sensor guide](docs/sensors.md)                       | HC-SR04 and DHT11 behavior in Superloop and Chunked EDF, pins, and smoke tests.               |
+| [Automation guide](tools/experiment_runner/README.md) | Batch experiment collection on Windows.                                                       |
+| [Project documents](docs/README.md)                   | Maintained Google Slides presentation and Google Colab analysis notebook.                     |
 
 ## Repository layout
 
-| Path | Contents |
-| --- | --- |
-| [`implementation/`](implementation/) | Self-contained STM32CubeIDE implementation; see its [firmware source map](implementation/Core/README.md) for the application-module layout. |
-| [`docs/`](docs/) | Concise technical documentation and links to maintained online materials. |
-| [`thesis/`](thesis/) | LaTeX sources, figures, and the generated PDF of the thesis proposal. |
-| [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation. |
+| Path                                                   | Contents                                                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`implementation/`](implementation/)                   | Self-contained STM32CubeIDE implementation, see its [firmware source map](implementation/Core/README.md) for the application-module layout. |
+| [`docs/`](docs/)                                       | Concise technical documentation and links to maintained online materials.                                                                   |
+| [`thesis/`](thesis/)                                   | LaTeX sources for the paper/thesis, figures, and the compiled PDF.                                                                          |
+| [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation.                                                                               |
 
 `implementation/Debug/`, `implementation/Release/`, `results/`, Python caches, and local reference/presentation files are generated or personal material and are ignored by Git.
 

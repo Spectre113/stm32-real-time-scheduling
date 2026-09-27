@@ -323,13 +323,29 @@ def flash_firmware(programmer: Path, frequency_khz: int, log_path: Path, output_
         str(programmer),
         "-c",
         "port=SWD",
+        "mode=UR",
+        "reset=HWrst",
         f"freq={frequency_khz}",
         "-w",
         str(output_path),
         "-v",
         "-rst",
     ]
-    run_command(command, cwd=REPOSITORY_ROOT, log_path=log_path)
+    for attempt in range(1, 4):
+        attempt_path = log_path.with_name(f"{log_path.stem}.attempt{attempt}.log")
+        try:
+            run_command(command, cwd=REPOSITORY_ROOT, log_path=attempt_path)
+        except RuntimeError:
+            log_path.write_text(attempt_path.read_text(encoding="utf-8"), encoding="utf-8")
+            failure = attempt_path.read_text(encoding="utf-8")
+            if attempt == 3 or not any(marker in failure for marker in (
+                "DEV_TARGET_RESET_ERR", "Unable to read device id", "No STM32 target found",
+            )):
+                raise
+            time.sleep(1)
+        else:
+            log_path.write_text(attempt_path.read_text(encoding="utf-8"), encoding="utf-8")
+            return
 
 
 def parse_device_csv(device_csv: str) -> dict[str, str]:

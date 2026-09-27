@@ -1,6 +1,6 @@
 # Документы проекта
 
-Поддерживаемые документы проекта размещены онлайн, чтобы для всех оставалась одна актуальная версия.
+Исходники статьи/дипломной работы находятся в [thesis/](../thesis/). Ниже приведены ссылки на онлайн-презентацию и материалы анализа.
 
 - [Презентация проекта (Google Slides)](https://docs.google.com/presentation/d/1G00Xcs1oBs7-omI5czPnljay-vytueP_O6MEM0KGgIo/edit?usp=sharing)
 - [Графики экспериментов и обработка результатов (Google Colab)](https://colab.research.google.com/drive/1dc12L2FlVo0GvSbgJcRNcKeT5a56jMEs?usp=sharing)

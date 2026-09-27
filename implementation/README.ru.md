@@ -4,7 +4,7 @@
 
 Этот каталог содержит самостоятельный проект STM32CubeIDE для `NUCLEO-F767ZI`.
 
-Импортируйте именно этот каталог в STM32CubeIDE через `File -> Import... -> General -> Existing Projects into Workspace`. Исходный код прошивки находится в `Core/`, а сгенерированные STM32Cube HAL и CMSIS - в `Drivers/`.
+Порядок импорта и запуска описан в [основном README](../README.ru.md). Исходники приложения находятся в `Core/`, HAL и CMSIS - в `Drivers/`.
 
 Карта модулей прошивки и правила безопасного изменения CubeMX приведены в
 [Core/README.ru.md](Core/README.ru.md). За конфигурацией экспериментов,

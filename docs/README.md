@@ -1,6 +1,6 @@
 # Project documents
 
-The maintained project documents are hosted online so that there is one current version for everyone.
+The paper/thesis source is maintained in [thesis/](../thesis/). Online presentation and analysis materials are linked below.
 
 - [Project presentation (Google Slides)](https://docs.google.com/presentation/d/1G00Xcs1oBs7-omI5czPnljay-vytueP_O6MEM0KGgIo/edit?usp=sharing)
 - [Experiment plots and result processing (Google Colab)](https://colab.research.google.com/drive/1dc12L2FlVo0GvSbgJcRNcKeT5a56jMEs?usp=sharing)

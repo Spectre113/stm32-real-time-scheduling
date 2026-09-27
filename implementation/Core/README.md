@@ -20,7 +20,7 @@ utilisation values are in [`Inc/workload_config.h`](Inc/workload_config.h).
 | --- | --- | --- |
 | Application entry | `Src/main.c` | CubeMX user sections, peripheral startup, task objects, top-level scheduler loop, and the app-specific UART summary adapter. |
 | Time and UART | `platform_time.*`, `app_uart.*` | DWT setup, microsecond time base, synthetic work, and UART formatting. |
-| Sensors | `hcsr04.*`, `dht11.*` | Blocking Superloop access and non-blocking Chunked EDF state machines. |
+| Sensors | `hcsr04.*`, `dht11.*` | Blocking Super Loop access and staged chunked EDF sensor handlers. |
 | Scheduling | `edf_selector.*`, `edf_executor.*`, `scheduler_release.*`, `scheduler_types.h` | EDF selection/execution, release maintenance, and shared scheduler types. |
 | Measurements | `task_stats.*`, `cycle_metrics.*`, `profile_samples.*`, `task_reporting.*` | Task timing statistics, cycle aggregates, sample storage, histograms, and CSV output. |
 | Experiment modes | `isolated_profile.*`, `minimal_superloop_profile.*`, `superloop_checks_profile.*`, `superloop_scalability_profile.*` | Isolated, clean, diagnostic, and scalability profiling modes. |
@@ -35,3 +35,5 @@ generation.
 
 After a regeneration, rebuild the project and verify that the includes in the
 `USER CODE` section of `main.c` are still present.
+
+Statistics settings and CSV semantics are defined in the [configuration reference](../../docs/configuration.md).
