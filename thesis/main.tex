@@ -335,7 +335,7 @@ Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assum
 \subsection{Experimental setup}
 Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled for now. Each synthetic job executes a timed busy-wait workload, the scheduler also uses busy polling. Timing is obtained from the DWT cycle counter, and UART reports are emitted after measurement stops.
 
-The results below use three tasks with $(T_1,T_2,T_3)=(10,50,200)$ ms and $D_i=T_i$. Table~\ref{tab:experimental_workloads} lists the configured execution budgets. Thus, $U$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, Super Loop scans tasks in index order. In the experiments, $R_i^1=t_0+T_i$, where $t_0$ is the common task-initialization timestamp.
+The results below use three tasks with $(T_1,T_2,T_3)=(10,50,200)$ ms and $D_i=T_i$. Table~\ref{tab:experimental_workloads} lists the configured execution budgets. Thus, $U$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, Super Loop scans tasks in index order. For clarity, the illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation releases each task for the first time one period after initialization, $R_i^1=t_0+T_i$.
 
 \begin{table}[!htbp]
   \centering
