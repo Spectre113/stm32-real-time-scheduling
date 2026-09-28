@@ -18,7 +18,7 @@ The current experiment series uses periodic synthetic tasks with controlled work
 - [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) with STM32Cube FW F7.
 - A serial terminal such as [PuTTY](https://www.putty.org/) or Tera Term.
 
-HC-SR04 and DHT11 are optional. The default manual configuration enables them, so set their `ENABLE_REAL_TAU*` switches to `0` when a sensor is not connected.
+HC-SR04 and DHT11 are optional. The default manual configuration enables them, so set their `ENABLE_HCSR04` / `ENABLE_DHT11` switches to `0` when a sensor is not connected.
 
 ## Quick start
 

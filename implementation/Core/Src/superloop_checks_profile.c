@@ -69,7 +69,7 @@ void SuperloopChecksProfile_Run(void)
     if (tau1_ready != 0U)
     {
       uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
+      Workload_RunUs(MINIMAL_TAU1_WORKLOAD_US);
       uint32_t task_end_cycles = DWT->CYCCNT;
       uint32_t release_start_cycles;
       uint32_t release_end_cycles;
@@ -109,7 +109,7 @@ void SuperloopChecksProfile_Run(void)
     if (tau2_ready != 0U)
     {
       uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
+      Workload_RunUs(MINIMAL_TAU2_WORKLOAD_US);
       uint32_t task_end_cycles = DWT->CYCCNT;
       uint32_t release_start_cycles;
       uint32_t release_end_cycles;

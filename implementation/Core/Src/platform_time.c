@@ -54,7 +54,7 @@ void delay_us(uint32_t us)
   }
 }
 
-void Synthetic_Workload_us(uint64_t duration_us)
+void Workload_RunUs(uint64_t duration_us)
 {
   uint64_t start = micros();
 

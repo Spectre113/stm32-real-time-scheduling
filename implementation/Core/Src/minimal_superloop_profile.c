@@ -58,7 +58,7 @@ void MinimalSuperloopProfile_Run(void)
     if (now_us >= tau1_next_release_us)
     {
       uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU1_WORKLOAD_US);
+      Workload_RunUs(MINIMAL_TAU1_WORKLOAD_US);
       uint32_t task_end_cycles = DWT->CYCCNT;
       tau1_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
                                             dwt_measurement_overhead_cycles);
@@ -84,7 +84,7 @@ void MinimalSuperloopProfile_Run(void)
     if (now_us >= tau2_next_release_us)
     {
       uint32_t task_start_cycles = DWT->CYCCNT;
-      Synthetic_Workload_us(MINIMAL_TAU2_WORKLOAD_US);
+      Workload_RunUs(MINIMAL_TAU2_WORKLOAD_US);
       uint32_t task_end_cycles = DWT->CYCCNT;
       tau2_task_cycles += Correct_DWT_Delta(task_end_cycles - task_start_cycles,
                                             dwt_measurement_overhead_cycles);

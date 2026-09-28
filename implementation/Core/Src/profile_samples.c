@@ -5,33 +5,33 @@
 #include <stdio.h>
 
 #if ENABLE_EXTENDED_STATS
-#define TAU1_MAX_SAMPLES 700U
-#define TAU2_MAX_SAMPLES 50U
+#define HCSR04_MAX_SAMPLES 700U
+#define DHT11_MAX_SAMPLES 50U
 
-static uint32_t g_tau1_exec_samples[TAU1_MAX_SAMPLES];
-static uint32_t g_tau2_exec_samples[TAU2_MAX_SAMPLES];
-static uint32_t g_tau1_sample_count;
-static uint32_t g_tau2_sample_count;
+static uint32_t g_hcsr04_exec_samples[HCSR04_MAX_SAMPLES];
+static uint32_t g_dht11_exec_samples[DHT11_MAX_SAMPLES];
+static uint32_t g_hcsr04_sample_count;
+static uint32_t g_dht11_sample_count;
 
 void ProfileSamples_Reset(void)
 {
-  g_tau1_sample_count = 0U;
-  g_tau2_sample_count = 0U;
+  g_hcsr04_sample_count = 0U;
+  g_dht11_sample_count = 0U;
 }
 
-void ProfileSamples_SaveTau1(uint64_t exec_time_us)
+void ProfileSamples_SaveHCSR04(uint64_t exec_time_us)
 {
-  if (g_tau1_sample_count < TAU1_MAX_SAMPLES)
+  if (g_hcsr04_sample_count < HCSR04_MAX_SAMPLES)
   {
-    g_tau1_exec_samples[g_tau1_sample_count++] = (uint32_t)exec_time_us;
+    g_hcsr04_exec_samples[g_hcsr04_sample_count++] = (uint32_t)exec_time_us;
   }
 }
 
-void ProfileSamples_SaveTau2(uint64_t exec_time_us)
+void ProfileSamples_SaveDHT11(uint64_t exec_time_us)
 {
-  if (g_tau2_sample_count < TAU2_MAX_SAMPLES)
+  if (g_dht11_sample_count < DHT11_MAX_SAMPLES)
   {
-    g_tau2_exec_samples[g_tau2_sample_count++] = (uint32_t)exec_time_us;
+    g_dht11_exec_samples[g_dht11_sample_count++] = (uint32_t)exec_time_us;
   }
 }
 
@@ -51,16 +51,16 @@ static void ProfileSamples_PrintList(const uint32_t *samples, uint32_t count)
 
 void ProfileSamples_Print(void)
 {
-  uart_print("\r\nTAU1_EXEC_SAMPLES_US:\r\n");
-  ProfileSamples_PrintList(g_tau1_exec_samples, g_tau1_sample_count);
-  uart_print("\r\n\r\nTAU2_EXEC_SAMPLES_US:\r\n");
-  ProfileSamples_PrintList(g_tau2_exec_samples, g_tau2_sample_count);
+  uart_print("\r\nHCSR04_EXEC_SAMPLES_US:\r\n");
+  ProfileSamples_PrintList(g_hcsr04_exec_samples, g_hcsr04_sample_count);
+  uart_print("\r\n\r\nDHT11_EXEC_SAMPLES_US:\r\n");
+  ProfileSamples_PrintList(g_dht11_exec_samples, g_dht11_sample_count);
   uart_print("\r\n");
 }
 
 #else
 void ProfileSamples_Reset(void) {}
-void ProfileSamples_SaveTau1(uint64_t exec_time_us) { (void)exec_time_us; }
-void ProfileSamples_SaveTau2(uint64_t exec_time_us) { (void)exec_time_us; }
+void ProfileSamples_SaveHCSR04(uint64_t exec_time_us) { (void)exec_time_us; }
+void ProfileSamples_SaveDHT11(uint64_t exec_time_us) { (void)exec_time_us; }
 void ProfileSamples_Print(void) {}
 #endif

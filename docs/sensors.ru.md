@@ -2,7 +2,7 @@
 
 [English version](sensors.md)
 
-Физические задачи необязательны. Перед запуском без конкретного устройства задайте соответствующий `ENABLE_REAL_TAU1` или `ENABLE_REAL_TAU2` равным `0`. HC-SR04 - это `tau1` с периодом 100 ms, DHT11 - `tau2` с периодом 2000 ms.
+Физические датчики необязательны. Перед запуском без конкретного устройства задайте соответствующий `ENABLE_HCSR04` или `ENABLE_DHT11` равным `0`. Задача HC-SR04 называется `hcsr04_task` и имеет период 100 ms, задача DHT11 — `dht11_task`, период 2000 ms. Они не входят в набор тестовых задач `tau1`, `tau2`, `tau3`.
 
 | Устройство   | Назначение пинов                    |
 | ------------ | ----------------------------------- |
@@ -48,15 +48,15 @@ Superloop сохраняет блокирующий baseline с `HAL_Delay(30)`.
 #define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
 #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
 #define PROFILE_WINDOW_US 10000000ULL
-#define ENABLE_REAL_TAU1 1
-#define ENABLE_REAL_TAU2 0
-#define ENABLE_SYNTH_IMU 0
-#define ENABLE_SYNTH_LIDAR 0
-#define ENABLE_SYNTH_CONTROL 0
+#define ENABLE_HCSR04 1
+#define ENABLE_DHT11 0
+#define ENABLE_TAU1 0
+#define ENABLE_TAU2 0
+#define ENABLE_TAU3 0
 #define ENABLE_DEBUG_PRINT 1
 ```
 
-Для запуска только DHT11 оставьте те же настройки, но установите `ENABLE_REAL_TAU1` в `0`, а `ENABLE_REAL_TAU2` в `1`. Для измерений верните `ENABLE_DEBUG_PRINT` в `0`, так как UART-вывод меняет временные характеристики.
+Для запуска только DHT11 оставьте те же настройки, но установите `ENABLE_HCSR04` в `0`, а `ENABLE_DHT11` в `1`. Для измерений верните `ENABLE_DEBUG_PRINT` в `0`, так как UART-вывод меняет временные характеристики.
 
 ## Планируемые устройства
 
@@ -65,4 +65,4 @@ Superloop сохраняет блокирующий baseline с `HAL_Delay(30)`.
 - **OV2640** - камера для получения изображений.
 - **SPW2430** - микрофон для получения акустического сигнала.
 
-Их аппаратная интеграция и обработчики задач пока не реализованы. Синтетическая задача Camera в текущих экспериментах задаёт вычислительную нагрузку и не обращается к OV2640.
+Их аппаратная интеграция и обработчики задач пока не реализованы. Синтетическая задача tau3 в текущих экспериментах задаёт вычислительную нагрузку и не обращается к OV2640.

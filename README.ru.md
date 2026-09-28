@@ -18,7 +18,7 @@
 - [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html) с STM32Cube FW F7.
 - UART-терминал: [PuTTY](https://www.putty.org/) или Tera Term.
 
-HC-SR04 и DHT11 необязательны. В текущей ручной конфигурации они включены, поэтому при отсутствии датчика установите соответствующий `ENABLE_REAL_TAU*` в `0`.
+HC-SR04 и DHT11 необязательны. В текущей ручной конфигурации они включены, поэтому при отсутствии датчика установите соответствующий `ENABLE_HCSR04` / `ENABLE_DHT11` в `0`.
 
 ## Быстрый запуск
 

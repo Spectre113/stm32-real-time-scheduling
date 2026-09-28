@@ -1,5 +1,9 @@
 # Configuration reference
 
+Periodic test tasks are `tau1`, `tau2`, `tau3` (periods 10, 50, 200 ms). Their budgets are `TAU1_WORKLOAD_US`, `TAU2_WORKLOAD_US`, `TAU3_WORKLOAD_US`; switches are `ENABLE_TAU1`, `ENABLE_TAU2`, `ENABLE_TAU3`; CSV labels are `TAU1`, `TAU2`, `TAU3`. Physical sensors are separate: `hcsr04_task` / `ENABLE_HCSR04` and `dht11_task` / `ENABLE_DHT11`. Super Loop executes tasks in `tau1 -> tau2 -> tau3` order. EDF selects the earliest absolute deadline; ties retain the original experiments' `tau2 -> tau1 -> tau3` order.
+
+New CSV files use `TAU_TASKS`, `SENSOR_TASKS`, `TAU_U_X10000`. Analysis of old archives requires explicit name conversion; firmware and runner contain no legacy aliases.
+
 [Русская версия](configuration.ru.md)
 
 Edit [`app_config.h`](../implementation/Core/Inc/app_config.h), then rebuild and flash. [`experiment_config.h`](../implementation/Core/Inc/experiment_config.h) is used only for temporary automation-runner overrides and normally remains unchanged.
@@ -15,15 +19,15 @@ Window and chunk macros ending in `_US` use microseconds and the `ULL` suffix. F
 | `WORKLOAD_SCENARIO`                                              | Synthetic workload scenario from `U50` to `U110`.                                            |
 | `SCHED_ALGO`                                                     | Scheduler for integrated mode: Superloop or Chunked EDF. Modes 3-6 use their own Superloops. |
 | `EXPERIMENT_MODE`                                                | Collected statistics and experiment behavior.                                                |
-| `INTEGRATED_SYNTH_TASK_COUNT`                                    | Two tasks (IMU + LiDAR) or three (adds Camera) in integrated mode.                           |
+| `INTEGRATED_TASK_COUNT`                                    | Two tasks (tau1 + tau2) or three (adds tau3) in integrated mode.                           |
 | `PROFILE_WINDOW_US`                                              | Integrated-profile measurement window.                                                       |
 | `MINIMAL_PROFILE_WINDOW_US`                                      | Window for modes 3 and 4.                                                                    |
 | `SCALABILITY_PROFILE_WINDOW_US`                                  | Window for modes 5 and 6.                                                                    |
 | `SCALABILITY_TASK_COUNT`                                         | Two, three, or four synthetic tasks in modes 5 and 6.                                        |
 | `EDF_CHUNK_US`                                                   | Synthetic-work chunk size for Chunked EDF.                                                   |
 | `SCHEDULER_MODE`                                                 | Integrated scheduler idle policy: busy polling or WFI. Modes 3 and 4 always busy-poll.       |
-| `ENABLE_SYNTH_IMU`, `ENABLE_SYNTH_LIDAR`, `ENABLE_SYNTH_CONTROL` | Enable optional synthetic integrated tasks. Camera follows `INTEGRATED_SYNTH_TASK_COUNT`.    |
-| `ENABLE_REAL_TAU1`, `ENABLE_REAL_TAU2`                           | Enable HC-SR04 and DHT11. Use `0` when the corresponding sensor is absent.                   |
+| `ENABLE_TAU1`, `ENABLE_TAU2`, `ENABLE_TAU3` | Enable optional synthetic integrated tasks. tau3 follows `INTEGRATED_TASK_COUNT`.    |
+| `ENABLE_HCSR04`, `ENABLE_DHT11`                           | Enable HC-SR04 and DHT11. Use `0` when the corresponding sensor is absent.                   |
 | `ENABLE_DEBUG_PRINT`                                             | Periodic diagnostic UART output. Keep `0` for measurements.                                  |
 | `ENABLE_POLLING_PROFILE`                                         | Full polling statistics in integrated mode.                                                  |
 
@@ -60,8 +64,8 @@ HC-SR04 uses its staged EXTI path in Chunked EDF rather than artificial syntheti
 | Constant                                        | Purpose                                                                                                                               |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `EXPERIMENT_INTEGRATED` (`0`)                   | Main experiment with task and scheduler statistics: execution, response time, deadline misses, skipped releases, and related metrics. |
-| `EXPERIMENT_ISOLATED_TAU1` (`1`)                | Isolated execution of the first task.                                                                                                 |
-| `EXPERIMENT_ISOLATED_TAU2` (`2`)                | Isolated execution of the second task.                                                                                                |
+| `EXPERIMENT_ISOLATED_HCSR04` (`1`)                | Isolated execution of the physical HC-SR04 sensor task.                                                                                                 |
+| `EXPERIMENT_ISOLATED_DHT11` (`2`)                | Isolated execution of the physical DHT11 sensor task.                                                                                                |
 | `EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE` (`3`)    | Clean two-task busy-polling Superloop profile. `SUPERLOOP_PCT` is the part of the window outside synthetic task bodies.               |
 | `EXPERIMENT_SUPERLOOP_CHECKS_PROFILE` (`4`)     | DWT-instrumented readiness-check and release-maintenance profile.                                                                     |
 | `EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN` (`5`)  | Clean 2/3/4-task busy-polling Superloop scalability profile.                                                                          |
@@ -77,7 +81,7 @@ Interpret profiles as follows:
 
 ## Tasks and CSV output
 
-Integrated synthetic tasks use these periods: IMU 10 ms, LiDAR 50 ms, Camera 200 ms. Their execution time depends on `Uxx`. Physical tasks use HC-SR04 at 100 ms and DHT11 at 2000 ms. Minimal Superloop profiles use a separate pair: `tau1` at 10 ms and `tau2` at 50 ms, controlled by `MINIMAL_TAU1_WORKLOAD_US` and `MINIMAL_TAU2_WORKLOAD_US`.
+Integrated synthetic tasks use these periods: tau1 10 ms, tau2 50 ms, tau3 200 ms. Their execution time depends on `Uxx`. Physical tasks use HC-SR04 at 100 ms and DHT11 at 2000 ms. Minimal Superloop profiles use a separate pair: `tau1` at 10 ms and `tau2` at 50 ms, controlled by `MINIMAL_TAU1_WORKLOAD_US` and `MINIMAL_TAU2_WORKLOAD_US`.
 
 Integrated mode prints `CSV_RUN,...` and `CSV_TASK,...` after the window. Other modes print their documented CSV row. Open the terminal before reset, then save the resulting line for the Colab notebook or another analysis tool.
 

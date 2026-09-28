@@ -2,7 +2,7 @@
 
 [Русская версия](sensors.ru.md)
 
-The physical tasks are optional. Set `ENABLE_REAL_TAU1` or `ENABLE_REAL_TAU2` to `0` before running without the corresponding hardware. HC-SR04 is `tau1` with a 100 ms period, DHT11 is `tau2` with a 2000 ms period.
+Physical sensors are optional. Set `ENABLE_HCSR04` or `ENABLE_DHT11` to `0` before running without the corresponding hardware. HC-SR04 uses `hcsr04_task` with a 100 ms period; DHT11 uses `dht11_task` with a 2000 ms period. These are separate from the test tasks `tau1`, `tau2`, `tau3`.
 
 | Device       | Pin assignment                           |
 | ------------ | ---------------------------------------- |
@@ -48,21 +48,21 @@ For a 10-second HC-SR04-only run:
 #define SCHED_ALGO SCHED_ALGO_CHUNKED_EDF
 #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
 #define PROFILE_WINDOW_US 10000000ULL
-#define ENABLE_REAL_TAU1 1
-#define ENABLE_REAL_TAU2 0
-#define ENABLE_SYNTH_IMU 0
-#define ENABLE_SYNTH_LIDAR 0
-#define ENABLE_SYNTH_CONTROL 0
+#define ENABLE_HCSR04 1
+#define ENABLE_DHT11 0
+#define ENABLE_TAU1 0
+#define ENABLE_TAU2 0
+#define ENABLE_TAU3 0
 #define ENABLE_DEBUG_PRINT 1
 ```
 
-For a DHT11-only run, use the same settings but set `ENABLE_REAL_TAU1` to `0` and `ENABLE_REAL_TAU2` to `1`. Restore `ENABLE_DEBUG_PRINT` to `0` for measurements because UART output changes timing.
+For a DHT11-only run, use the same settings but set `ENABLE_HCSR04` to `0` and `ENABLE_DHT11` to `1`. Restore `ENABLE_DEBUG_PRINT` to `0` for measurements because UART output changes timing.
 
 ## Planned devices
 
 Two devices listed in the [paper](../thesis/main.tex) are planned for future integration:
 
-- **OV2640** - camera for image acquisition.
+- **OV2640** - tau3 for image acquisition.
 - **SPW2430** - microphone for acoustic signal acquisition.
 
-Their hardware integration and task handlers are not yet implemented. The synthetic Camera task in current experiments generates a computational workload and does not access an OV2640.
+Their hardware integration and task handlers are not yet implemented. The synthetic tau3 task in current experiments generates a computational workload and does not access an OV2640.

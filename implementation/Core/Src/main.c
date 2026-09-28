@@ -82,24 +82,22 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
 
+/* Physical sensors are separate from the paper's workload tau1/tau2/tau3. */
+static Task_t hcsr04_task;
+static Task_t dht11_task;
+
+#if ENABLE_TAU1
 static Task_t tau1;
+#endif
+
+#if ENABLE_TAU2
 static Task_t tau2;
-
-#if ENABLE_SYNTH_IMU
-static Task_t tau_imu;
 #endif
 
-#if ENABLE_SYNTH_LIDAR
-static Task_t tau_lidar;
+#if ENABLE_TAU3
+static Task_t tau3;
 #endif
 
-#if ENABLE_SYNTH_CAMERA
-static Task_t tau_camera;
-#endif
-
-#if ENABLE_SYNTH_CONTROL
-static Task_t tau_control;
-#endif
 
 static int g_distance_cm = -1;
 
@@ -130,91 +128,104 @@ static void MX_TIM3_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+#if SCHED_ALGO == SCHED_ALGO_SUPERLOOP
+__STATIC_FORCEINLINE uint8_t SuperLoop_MeasureReadiness(
+    const Task_t *task, uint64_t now_us, uint64_t *release_us,
+    uint32_t *measured_cycles)
+{
+  uint32_t start = DWT->CYCCNT;
+
+  /* The input dependency pins the release load and comparison after start.
+   * A memory clobber alone would not pin register-only arithmetic. */
+  __asm volatile ("" : "+r" (task) : "r" (start) : "memory");
+  uint64_t release = task->next_release_us;
+  uint8_t ready = ((int64_t)(now_us - release) >= 0);
+  /* Consume both results before the end timestamp can be read. */
+  __asm volatile ("" : : "r" (ready), "r" (release) : "memory");
+
+  uint32_t end = DWT->CYCCNT;
+  *release_us = release;
+  *measured_cycles += (uint32_t)(end - start);
+  return ready;
+}
+#endif
+
+#if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_HCSR04
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   HCSR04_Async_OnExti(GPIO_Pin);
 }
 #endif
 
-static void Tau1_Run(void)
+static void HCSR04_Run(void)
 {
   g_distance_cm = HCSR04_Read_cm_Blocking();
-  tau1.run_count++;
+  hcsr04_task.run_count++;
 }
 
-static void Tau2_Run(void)
+static void DHT11_Run(void)
 {
   g_dht_res = DHT11_Read(&g_temp, &g_hum);
+  dht11_task.run_count++;
+}
+
+#if ENABLE_TAU1
+static void Tau1_Run(void)
+{
+  Workload_RunUs(TAU1_WORKLOAD_US);
+  tau1.run_count++;
+}
+#endif
+
+#if ENABLE_TAU2
+static void Tau2_Run(void)
+{
+  Workload_RunUs(TAU2_WORKLOAD_US);
   tau2.run_count++;
 }
+#endif
 
-#if ENABLE_SYNTH_IMU
-static void Tau_IMU_Run(void)
+#if ENABLE_TAU3
+static void Tau3_Run(void)
 {
-  Synthetic_Workload_us(TAU_IMU_WORKLOAD_US);
-  tau_imu.run_count++;
+  Workload_RunUs(TAU3_WORKLOAD_US);
+  tau3.run_count++;
 }
 #endif
 
-#if ENABLE_SYNTH_LIDAR
-static void Tau_LiDAR_Run(void)
-{
-  Synthetic_Workload_us(TAU_LIDAR_WORKLOAD_US);
-  tau_lidar.run_count++;
-}
-#endif
-
-#if ENABLE_SYNTH_CAMERA
-static void Tau_Camera_Run(void)
-{
-  Synthetic_Workload_us(TAU_CAMERA_WORKLOAD_US);
-  tau_camera.run_count++;
-}
-#endif
-
-#if ENABLE_SYNTH_CONTROL
-static void Tau_Control_Run(void)
-{
-  Synthetic_Workload_us(TAU_CONTROL_WORKLOAD_US);
-  tau_control.run_count++;
-}
-#endif
 
 #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
-#if !ENABLE_SYNTH_CONTROL && !ENABLE_REAL_TAU1 && !ENABLE_SYNTH_LIDAR && \
-    !ENABLE_SYNTH_IMU && !ENABLE_SYNTH_CAMERA && !ENABLE_REAL_TAU2
+#if !ENABLE_HCSR04 && !ENABLE_TAU2 && \
+    !ENABLE_TAU1 && !ENABLE_TAU3 && !ENABLE_DHT11
 #error "Chunked EDF requires at least one enabled task"
 #endif
 
+/* Preserve the measured EDF tie order: workload tau2, tau1, tau3.
+ * Selection uses absolute deadlines first; array order only breaks ties. */
 static SchedTaskRef_t g_sched_tasks[] =
 {
-  #if ENABLE_SYNTH_CONTROL
-    { &tau_control, Tau_Control_Run, TAU_CONTROL_WORKLOAD_US, 1U,
-      SCHED_TASK_SYNTHETIC },
+
+  #if ENABLE_HCSR04
+    { &hcsr04_task, HCSR04_Run, 0ULL, 1U, SCHED_TASK_STAGED_HCSR04 },
   #endif
 
-  #if ENABLE_REAL_TAU1
-    { &tau1, Tau1_Run, 0ULL, 1U, SCHED_TASK_STAGED_HCSR04 },
+  #if ENABLE_TAU2
+    { &tau2, Tau2_Run, TAU2_WORKLOAD_US, 1U,
+      SCHED_TASK_WORKLOAD },
   #endif
 
-  #if ENABLE_SYNTH_LIDAR
-    { &tau_lidar, Tau_LiDAR_Run, TAU_LIDAR_WORKLOAD_US, 1U,
-      SCHED_TASK_SYNTHETIC },
+  #if ENABLE_TAU1
+    { &tau1, Tau1_Run, TAU1_WORKLOAD_US, 1U,
+      SCHED_TASK_WORKLOAD },
   #endif
 
-  #if ENABLE_SYNTH_IMU
-    { &tau_imu, Tau_IMU_Run, TAU_IMU_WORKLOAD_US, 1U,
-      SCHED_TASK_SYNTHETIC },
+  #if ENABLE_TAU3
+    { &tau3, Tau3_Run, TAU3_WORKLOAD_US, 1U,
+      SCHED_TASK_WORKLOAD },
   #endif
 
-  #if ENABLE_SYNTH_CAMERA
-    { &tau_camera, Tau_Camera_Run, TAU_CAMERA_WORKLOAD_US, 1U,
-      SCHED_TASK_SYNTHETIC },
-  #endif
-
-  #if ENABLE_REAL_TAU2
-    { &tau2, Tau2_Run, 0ULL, 1U, SCHED_TASK_STAGED_DHT11 },
+  #if ENABLE_DHT11
+    { &dht11_task, DHT11_Run, 0ULL, 1U, SCHED_TASK_STAGED_DHT11 },
   #endif
 };
 
@@ -224,44 +235,41 @@ static const uint32_t g_sched_task_count =
 
 static void Task_SaveExecSample(Task_t *task, uint64_t exec_time_us)
 {
-  if (task == &tau1)
+  if (task == &hcsr04_task)
   {
-    ProfileSamples_SaveTau1(exec_time_us);
+    ProfileSamples_SaveHCSR04(exec_time_us);
   }
-  else if (task == &tau2)
+  else if (task == &dht11_task)
   {
-    ProfileSamples_SaveTau2(exec_time_us);
+    ProfileSamples_SaveDHT11(exec_time_us);
   }
 }
 
 static void Reset_Profiling_Stats(void)
 {
-  Task_ResetStats(&tau1);
-  Task_ResetStats(&tau2);
+  Task_ResetStats(&hcsr04_task);
+  Task_ResetStats(&dht11_task);
 
-  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_HCSR04
     HCSR04_Async_Reset();
   #endif
 
-  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU2
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_DHT11
     DHT11_Async_Reset();
   #endif
 
-	#if ENABLE_SYNTH_IMU
-	  Task_ResetStats(&tau_imu);
+	#if ENABLE_TAU1
+	  Task_ResetStats(&tau1);
 	#endif
 
-	#if ENABLE_SYNTH_LIDAR
-	  Task_ResetStats(&tau_lidar);
+	#if ENABLE_TAU2
+	  Task_ResetStats(&tau2);
 	#endif
 
-	#if ENABLE_SYNTH_CAMERA
-	  Task_ResetStats(&tau_camera);
+	#if ENABLE_TAU3
+	  Task_ResetStats(&tau3);
 	#endif
 
-	#if ENABLE_SYNTH_CONTROL
-	  Task_ResetStats(&tau_control);
-	#endif
 
   CycleMetrics_Reset(&g_scheduler_metrics);
   CycleMetrics_Reset(&g_polling_metrics);
@@ -278,31 +286,27 @@ static void Print_Profiling_Summary(void)
   uint64_t measured_window_us = snapshot_us - g_profile_start_us;
   if (measured_window_us == 0ULL) measured_window_us = 1ULL;
 
-  uint64_t tau1_avg_exec = 0;
-  uint64_t tau2_avg_exec = 0;
+  uint64_t hcsr04_task_avg_exec = 0;
+  uint64_t dht11_task_avg_exec = 0;
 
-  uint64_t tau1_avg_response = 0;
-  uint64_t tau2_avg_response = 0;
+  uint64_t hcsr04_task_avg_response = 0;
+  uint64_t dht11_task_avg_response = 0;
 
-  #if ENABLE_SYNTH_IMU
-    uint64_t tau_imu_avg_exec = 0;
-    uint64_t tau_imu_avg_response = 0;
+  #if ENABLE_TAU1
+    uint64_t tau1_avg_exec = 0;
+    uint64_t tau1_avg_response = 0;
   #endif
 
-	#if ENABLE_SYNTH_LIDAR
-	  uint64_t tau_lidar_avg_exec = 0;
-	  uint64_t tau_lidar_avg_response = 0;
+	#if ENABLE_TAU2
+	  uint64_t tau2_avg_exec = 0;
+	  uint64_t tau2_avg_response = 0;
 	#endif
 
-	#if ENABLE_SYNTH_CAMERA
-	  uint64_t tau_camera_avg_exec = 0;
-	  uint64_t tau_camera_avg_response = 0;
+	#if ENABLE_TAU3
+	  uint64_t tau3_avg_exec = 0;
+	  uint64_t tau3_avg_response = 0;
 	#endif
 
-	#if ENABLE_SYNTH_CONTROL
-	  uint64_t tau_control_avg_exec = 0;
-	  uint64_t tau_control_avg_response = 0;
-	#endif
 
   uint32_t cycles_per_us = PlatformTime_CyclesPerUs();
 
@@ -323,7 +327,23 @@ static void Print_Profiling_Summary(void)
   uint64_t measured_busy_us = 0;
   uint64_t measured_busy_percent_x10000 = 0;
 
-  #if ENABLE_REAL_TAU1
+  #if ENABLE_HCSR04
+    if (hcsr04_task.run_count > 0)
+    {
+      hcsr04_task_avg_exec = hcsr04_task.total_exec_us / hcsr04_task.run_count;
+      hcsr04_task_avg_response = hcsr04_task.total_response_us / hcsr04_task.run_count;
+    }
+  #endif
+
+	#if ENABLE_DHT11
+		if (dht11_task.run_count > 0)
+		{
+			dht11_task_avg_exec = dht11_task.total_exec_us / dht11_task.run_count;
+			dht11_task_avg_response = dht11_task.total_response_us / dht11_task.run_count;
+		}
+	#endif
+
+  #if ENABLE_TAU1
     if (tau1.run_count > 0)
     {
       tau1_avg_exec = tau1.total_exec_us / tau1.run_count;
@@ -331,35 +351,19 @@ static void Print_Profiling_Summary(void)
     }
   #endif
 
-	#if ENABLE_REAL_TAU2
-		if (tau2.run_count > 0)
-		{
-			tau2_avg_exec = tau2.total_exec_us / tau2.run_count;
-			tau2_avg_response = tau2.total_response_us / tau2.run_count;
-		}
-	#endif
-
-  #if ENABLE_SYNTH_IMU
-    if (tau_imu.run_count > 0)
-    {
-      tau_imu_avg_exec = tau_imu.total_exec_us / tau_imu.run_count;
-      tau_imu_avg_response = tau_imu.total_response_us / tau_imu.run_count;
-    }
-  #endif
-
-	#if ENABLE_SYNTH_LIDAR
-	  if (tau_lidar.run_count > 0)
+	#if ENABLE_TAU2
+	  if (tau2.run_count > 0)
 	  {
-		tau_lidar_avg_exec = tau_lidar.total_exec_us / tau_lidar.run_count;
-		tau_lidar_avg_response = tau_lidar.total_response_us / tau_lidar.run_count;
+		tau2_avg_exec = tau2.total_exec_us / tau2.run_count;
+		tau2_avg_response = tau2.total_response_us / tau2.run_count;
 	  }
 	#endif
 
-	#if ENABLE_SYNTH_CAMERA
-	  if (tau_camera.run_count > 0)
+	#if ENABLE_TAU3
+	  if (tau3.run_count > 0)
 	  {
-		tau_camera_avg_exec = tau_camera.total_exec_us / tau_camera.run_count;
-		tau_camera_avg_response = tau_camera.total_response_us / tau_camera.run_count;
+		tau3_avg_exec = tau3.total_exec_us / tau3.run_count;
+		tau3_avg_response = tau3.total_response_us / tau3.run_count;
 	  }
 	#endif
 
@@ -379,29 +383,26 @@ static void Print_Profiling_Summary(void)
 
   task_exec_total_us = 0;
 
-	#if ENABLE_REAL_TAU1
-	  task_exec_total_us += tau1.total_exec_us + tau1.accumulated_exec_us;
+	#if ENABLE_HCSR04
+	  task_exec_total_us += hcsr04_task.total_exec_us + hcsr04_task.accumulated_exec_us;
 	#endif
 
-	#if ENABLE_REAL_TAU2
-	  task_exec_total_us += tau2.total_exec_us + tau2.accumulated_exec_us;
+	#if ENABLE_DHT11
+	  task_exec_total_us += dht11_task.total_exec_us + dht11_task.accumulated_exec_us;
 	#endif
 
-  #if ENABLE_SYNTH_IMU
-    task_exec_total_us += tau_imu.total_exec_us + tau_imu.accumulated_exec_us;
+  #if ENABLE_TAU1
+    task_exec_total_us += tau1.total_exec_us + tau1.accumulated_exec_us;
   #endif
 
-  #if ENABLE_SYNTH_LIDAR
-    task_exec_total_us += tau_lidar.total_exec_us + tau_lidar.accumulated_exec_us;
+  #if ENABLE_TAU2
+    task_exec_total_us += tau2.total_exec_us + tau2.accumulated_exec_us;
   #endif
 
-	#if ENABLE_SYNTH_CAMERA
-		task_exec_total_us += tau_camera.total_exec_us + tau_camera.accumulated_exec_us;
+	#if ENABLE_TAU3
+		task_exec_total_us += tau3.total_exec_us + tau3.accumulated_exec_us;
 	#endif
 
-	#if ENABLE_SYNTH_CONTROL
-	  task_exec_total_us += tau_control.total_exec_us + tau_control.accumulated_exec_us;
-	#endif
 
   task_exec_percent_x10000 = (task_exec_total_us * 1000000ULL) / measured_window_us;
 
@@ -449,7 +450,7 @@ static void Print_Profiling_Summary(void)
   uart_print(msg);
 
   snprintf(msg, sizeof(msg),
-           "enabled synthetic utilization (excludes sensors): %lu.%02lu %%\r\n",
+           "enabled workload utilization (excludes sensors): %lu.%02lu %%\r\n",
            (unsigned long)(UTIL_X10000 / 100ULL),
            (unsigned long)(UTIL_X10000 % 100ULL));
   uart_print(msg);
@@ -461,46 +462,132 @@ static void Print_Profiling_Summary(void)
     uart_print(msg);
   #endif
 
-	#if ENABLE_REAL_TAU1
+	#if ENABLE_HCSR04
 	  snprintf(msg, sizeof(msg),
-			   "tau1 HC-SR04 | runs=%lu\r\n",
-			   (unsigned long)tau1.run_count);
+			   "hcsr04_task HC-SR04 | runs=%lu\r\n",
+			   (unsigned long)hcsr04_task.run_count);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  exec_us     avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau1_avg_exec,
-			   (unsigned long)tau1.min_exec_us,
-			   (unsigned long)tau1.max_exec_us);
+			   (unsigned long)hcsr04_task_avg_exec,
+			   (unsigned long)hcsr04_task.min_exec_us,
+			   (unsigned long)hcsr04_task.max_exec_us);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  response_us avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau1_avg_response,
-			   (unsigned long)tau1.min_response_us,
-			   (unsigned long)tau1.max_response_us);
+			   (unsigned long)hcsr04_task_avg_response,
+			   (unsigned long)hcsr04_task.min_response_us,
+			   (unsigned long)hcsr04_task.max_response_us);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
-			   (unsigned long)tau1.deadline_ms,
-			   (unsigned long)tau1.deadline_miss_count,
-			   (unsigned long)tau1.max_lateness_us);
+			   (unsigned long)hcsr04_task.deadline_ms,
+			   (unsigned long)hcsr04_task.deadline_miss_count,
+			   (unsigned long)hcsr04_task.max_lateness_us);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  skipped releases=%lu | total timing failures=%lu\r\n",
-			   (unsigned long)tau1.skipped_release_count,
-			   (unsigned long)tau1.total_timing_failures);
+			   (unsigned long)hcsr04_task.skipped_release_count,
+			   (unsigned long)hcsr04_task.total_timing_failures);
 	  uart_print(msg);
 
-	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau1);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &hcsr04_task);
 	#endif
 
-	#if ENABLE_REAL_TAU2
+	#if ENABLE_DHT11
 	  snprintf(msg, sizeof(msg),
-			   "tau2 DHT11   | runs=%lu\r\n",
+			   "dht11_task DHT11   | runs=%lu\r\n",
+			   (unsigned long)dht11_task.run_count);
+	  uart_print(msg);
+
+	  snprintf(msg, sizeof(msg),
+			   "  exec_us     avg=%lu min=%lu max=%lu\r\n",
+			   (unsigned long)dht11_task_avg_exec,
+			   (unsigned long)dht11_task.min_exec_us,
+			   (unsigned long)dht11_task.max_exec_us);
+	  uart_print(msg);
+
+	  snprintf(msg, sizeof(msg),
+			   "  response_us avg=%lu min=%lu max=%lu\r\n",
+			   (unsigned long)dht11_task_avg_response,
+			   (unsigned long)dht11_task.min_response_us,
+			   (unsigned long)dht11_task.max_response_us);
+	  uart_print(msg);
+
+	  snprintf(msg, sizeof(msg),
+			   "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
+			   (unsigned long)dht11_task.deadline_ms,
+			   (unsigned long)dht11_task.deadline_miss_count,
+			   (unsigned long)dht11_task.max_lateness_us);
+	  uart_print(msg);
+
+	  snprintf(msg, sizeof(msg),
+			   "  skipped releases=%lu | total timing failures=%lu\r\n",
+			   (unsigned long)dht11_task.skipped_release_count,
+			   (unsigned long)dht11_task.total_timing_failures);
+	  uart_print(msg);
+
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &dht11_task);
+	#endif
+
+  #if ENABLE_TAU1
+    snprintf(msg, sizeof(msg),
+             "tau1 | runs=%lu\r\n",
+             (unsigned long)tau1.run_count);
+    uart_print(msg);
+
+    snprintf(msg, sizeof(msg),
+             "  period     T=%lu ms | target C=%lu us | deadline D=%lu ms\r\n",
+             (unsigned long)tau1.period_ms,
+             (unsigned long)TAU1_WORKLOAD_US,
+             (unsigned long)tau1.deadline_ms);
+    uart_print(msg);
+
+    snprintf(msg, sizeof(msg),
+             "  exec_us     avg=%lu min=%lu max=%lu\r\n",
+             (unsigned long)tau1_avg_exec,
+             (unsigned long)tau1.min_exec_us,
+             (unsigned long)tau1.max_exec_us);
+    uart_print(msg);
+
+    snprintf(msg, sizeof(msg),
+             "  response_us avg=%lu min=%lu max=%lu\r\n",
+             (unsigned long)tau1_avg_response,
+             (unsigned long)tau1.min_response_us,
+             (unsigned long)tau1.max_response_us);
+    uart_print(msg);
+
+    snprintf(msg, sizeof(msg),
+             "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
+             (unsigned long)tau1.deadline_ms,
+             (unsigned long)tau1.deadline_miss_count,
+             (unsigned long)tau1.max_lateness_us);
+    uart_print(msg);
+
+    snprintf(msg, sizeof(msg),
+             "  skipped releases=%lu | total timing failures=%lu\r\n",
+             (unsigned long)tau1.skipped_release_count,
+             (unsigned long)tau1.total_timing_failures);
+    uart_print(msg);
+
+    TaskReporting_PrintExecHistogram("  exec distribution:", &tau1);
+  #endif
+
+	#if ENABLE_TAU2
+	  snprintf(msg, sizeof(msg),
+			   "tau2 | runs=%lu\r\n",
 			   (unsigned long)tau2.run_count);
+	  uart_print(msg);
+
+	  snprintf(msg, sizeof(msg),
+			   "  period     T=%lu ms | target C=%lu us | deadline D=%lu ms\r\n",
+			   (unsigned long)tau2.period_ms,
+			   (unsigned long)TAU2_WORKLOAD_US,
+			   (unsigned long)tau2.deadline_ms);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
@@ -533,177 +620,49 @@ static void Print_Profiling_Summary(void)
 	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau2);
 	#endif
 
-  #if ENABLE_SYNTH_IMU
-    snprintf(msg, sizeof(msg),
-             "tau_IMU synthetic | runs=%lu\r\n",
-             (unsigned long)tau_imu.run_count);
-    uart_print(msg);
-
-    snprintf(msg, sizeof(msg),
-             "  period     T=%lu ms | target C=%lu us | deadline D=%lu ms\r\n",
-             (unsigned long)tau_imu.period_ms,
-             (unsigned long)TAU_IMU_WORKLOAD_US,
-             (unsigned long)tau_imu.deadline_ms);
-    uart_print(msg);
-
-    snprintf(msg, sizeof(msg),
-             "  exec_us     avg=%lu min=%lu max=%lu\r\n",
-             (unsigned long)tau_imu_avg_exec,
-             (unsigned long)tau_imu.min_exec_us,
-             (unsigned long)tau_imu.max_exec_us);
-    uart_print(msg);
-
-    snprintf(msg, sizeof(msg),
-             "  response_us avg=%lu min=%lu max=%lu\r\n",
-             (unsigned long)tau_imu_avg_response,
-             (unsigned long)tau_imu.min_response_us,
-             (unsigned long)tau_imu.max_response_us);
-    uart_print(msg);
-
-    snprintf(msg, sizeof(msg),
-             "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
-             (unsigned long)tau_imu.deadline_ms,
-             (unsigned long)tau_imu.deadline_miss_count,
-             (unsigned long)tau_imu.max_lateness_us);
-    uart_print(msg);
-
-    snprintf(msg, sizeof(msg),
-             "  skipped releases=%lu | total timing failures=%lu\r\n",
-             (unsigned long)tau_imu.skipped_release_count,
-             (unsigned long)tau_imu.total_timing_failures);
-    uart_print(msg);
-
-    TaskReporting_PrintExecHistogram("  exec distribution:", &tau_imu);
-  #endif
-
-	#if ENABLE_SYNTH_LIDAR
+	#if ENABLE_TAU3
 	  snprintf(msg, sizeof(msg),
-			   "tau_LiDAR synthetic | runs=%lu\r\n",
-			   (unsigned long)tau_lidar.run_count);
+			   "tau3 | runs=%lu\r\n",
+			   (unsigned long)tau3.run_count);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  period     T=%lu ms | target C=%lu us | deadline D=%lu ms\r\n",
-			   (unsigned long)tau_lidar.period_ms,
-			   (unsigned long)TAU_LIDAR_WORKLOAD_US,
-			   (unsigned long)tau_lidar.deadline_ms);
+			   (unsigned long)tau3.period_ms,
+			   (unsigned long)TAU3_WORKLOAD_US,
+			   (unsigned long)tau3.deadline_ms);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  exec_us     avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau_lidar_avg_exec,
-			   (unsigned long)tau_lidar.min_exec_us,
-			   (unsigned long)tau_lidar.max_exec_us);
+			   (unsigned long)tau3_avg_exec,
+			   (unsigned long)tau3.min_exec_us,
+			   (unsigned long)tau3.max_exec_us);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  response_us avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau_lidar_avg_response,
-			   (unsigned long)tau_lidar.min_response_us,
-			   (unsigned long)tau_lidar.max_response_us);
+			   (unsigned long)tau3_avg_response,
+			   (unsigned long)tau3.min_response_us,
+			   (unsigned long)tau3.max_response_us);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
-			   (unsigned long)tau_lidar.deadline_ms,
-			   (unsigned long)tau_lidar.deadline_miss_count,
-			   (unsigned long)tau_lidar.max_lateness_us);
+			   (unsigned long)tau3.deadline_ms,
+			   (unsigned long)tau3.deadline_miss_count,
+			   (unsigned long)tau3.max_lateness_us);
 	  uart_print(msg);
 
 	  snprintf(msg, sizeof(msg),
 			   "  skipped releases=%lu | total timing failures=%lu\r\n",
-			   (unsigned long)tau_lidar.skipped_release_count,
-			   (unsigned long)tau_lidar.total_timing_failures);
+			   (unsigned long)tau3.skipped_release_count,
+			   (unsigned long)tau3.total_timing_failures);
 	  uart_print(msg);
 
-	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau_lidar);
+	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau3);
 	#endif
 
-	#if ENABLE_SYNTH_CAMERA
-	  snprintf(msg, sizeof(msg),
-			   "tau_Camera synthetic | runs=%lu\r\n",
-			   (unsigned long)tau_camera.run_count);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  period     T=%lu ms | target C=%lu us | deadline D=%lu ms\r\n",
-			   (unsigned long)tau_camera.period_ms,
-			   (unsigned long)TAU_CAMERA_WORKLOAD_US,
-			   (unsigned long)tau_camera.deadline_ms);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  exec_us     avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau_camera_avg_exec,
-			   (unsigned long)tau_camera.min_exec_us,
-			   (unsigned long)tau_camera.max_exec_us);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  response_us avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau_camera_avg_response,
-			   (unsigned long)tau_camera.min_response_us,
-			   (unsigned long)tau_camera.max_response_us);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
-			   (unsigned long)tau_camera.deadline_ms,
-			   (unsigned long)tau_camera.deadline_miss_count,
-			   (unsigned long)tau_camera.max_lateness_us);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  skipped releases=%lu | total timing failures=%lu\r\n",
-			   (unsigned long)tau_camera.skipped_release_count,
-			   (unsigned long)tau_camera.total_timing_failures);
-	  uart_print(msg);
-
-	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau_camera);
-	#endif
-
-	#if ENABLE_SYNTH_CONTROL
-	  snprintf(msg, sizeof(msg),
-			   "tau_Control synthetic | runs=%lu\r\n",
-			   (unsigned long)tau_control.run_count);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  period     T=%lu ms | target C=%lu us | deadline D=%lu ms\r\n",
-			   (unsigned long)tau_control.period_ms,
-			   (unsigned long)TAU_CONTROL_WORKLOAD_US,
-			   (unsigned long)tau_control.deadline_ms);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  exec_us     avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau_control_avg_exec,
-			   (unsigned long)tau_control.min_exec_us,
-			   (unsigned long)tau_control.max_exec_us);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  response_us avg=%lu min=%lu max=%lu\r\n",
-			   (unsigned long)tau_control_avg_response,
-			   (unsigned long)tau_control.min_response_us,
-			   (unsigned long)tau_control.max_response_us);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  deadline   D=%lu ms | misses=%lu | max_lateness_us=%lu\r\n",
-			   (unsigned long)tau_control.deadline_ms,
-			   (unsigned long)tau_control.deadline_miss_count,
-			   (unsigned long)tau_control.max_lateness_us);
-	  uart_print(msg);
-
-	  snprintf(msg, sizeof(msg),
-			   "  skipped releases=%lu | total timing failures=%lu\r\n",
-			   (unsigned long)tau_control.skipped_release_count,
-			   (unsigned long)tau_control.total_timing_failures);
-	  uart_print(msg);
-
-	  TaskReporting_PrintExecHistogram("  exec distribution:", &tau_control);
-	#endif
 
   snprintf(msg, sizeof(msg),
            "scheduler decision | loops=%lu\r\n",
@@ -774,7 +733,7 @@ static void Print_Profiling_Summary(void)
     uart_print("  busy polling enabled: CPU does not sleep; logical idle is spent checking task releases\r\n");
   #endif
 
-#if ENABLE_REAL_TAU1 || ENABLE_REAL_TAU2
+#if ENABLE_HCSR04 || ENABLE_DHT11
   snprintf(msg, sizeof(msg),
            "Last values  | Distance=%d cm | DHT11 result=%d | Temp=%d C | Hum=%d %%\r\n",
            g_distance_cm,
@@ -788,7 +747,7 @@ static void Print_Profiling_Summary(void)
   #endif
 
   snprintf(msg, sizeof(msg),
-           "CSV_RUN,EXTENDED_STATS=%u,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,REQUESTED_WINDOW_US=%lu,SYNTH_U_X10000=%lu,REAL_TASKS=%u,SYNTH_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
+           "CSV_RUN,EXTENDED_STATS=%u,SCHED=%s,SCENARIO=%s,U=%lu,WINDOW_US=%lu,REQUESTED_WINDOW_US=%lu,TAU_U_X10000=%lu,SENSOR_TASKS=%u,TAU_TASKS=%u,CHUNK_US=%lu,SCHED_LOOPS=%lu,SCHED_OVH=%lu.%04lu,POLL_LOOPS=%lu,POLL_OVH=%lu.%04lu,TASK_EXEC=%lu.%04lu,BUSY=%lu.%04lu,IDLE=%lu.%04lu\r\n",
            (unsigned int)ENABLE_EXTENDED_STATS,
            SCHED_ALGO_NAME,
            WORKLOAD_SCENARIO_NAME,
@@ -796,8 +755,8 @@ static void Print_Profiling_Summary(void)
            (unsigned long)measured_window_us,
            (unsigned long)PROFILE_WINDOW_US,
            (unsigned long)UTIL_X10000,
-           (unsigned int)(ENABLE_REAL_TAU1 + ENABLE_REAL_TAU2),
-           (unsigned int)ACTIVE_SYNTH_TASK_COUNT,
+           (unsigned int)(ENABLE_HCSR04 + ENABLE_DHT11),
+           (unsigned int)ACTIVE_TAU_TASK_COUNT,
            (unsigned long)SCHED_CSV_CHUNK_US,
            (unsigned long)g_scheduler_metrics.count,
            (unsigned long)(sched_overhead_x10000 / 10000),
@@ -813,29 +772,24 @@ static void Print_Profiling_Summary(void)
            (unsigned long)(logical_idle_percent_x10000 % 10000));
   uart_print(msg);
 
-  #if ENABLE_SYNTH_IMU
+  #if ENABLE_TAU1
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
-                               WORKLOAD_UTILIZATION_PERCENT, "IMU", &tau_imu,
-                               TAU_IMU_WORKLOAD_US, snapshot_us);
+                               WORKLOAD_UTILIZATION_PERCENT, "TAU1", &tau1,
+                               TAU1_WORKLOAD_US, snapshot_us);
   #endif
 
-  #if ENABLE_SYNTH_LIDAR
+  #if ENABLE_TAU2
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
-                               WORKLOAD_UTILIZATION_PERCENT, "LIDAR", &tau_lidar,
-                               TAU_LIDAR_WORKLOAD_US, snapshot_us);
+                               WORKLOAD_UTILIZATION_PERCENT, "TAU2", &tau2,
+                               TAU2_WORKLOAD_US, snapshot_us);
   #endif
 
-  #if ENABLE_SYNTH_CAMERA
+  #if ENABLE_TAU3
     TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
-                               WORKLOAD_UTILIZATION_PERCENT, "CAMERA", &tau_camera,
-                               TAU_CAMERA_WORKLOAD_US, snapshot_us);
+                               WORKLOAD_UTILIZATION_PERCENT, "TAU3", &tau3,
+                               TAU3_WORKLOAD_US, snapshot_us);
   #endif
 
-  #if ENABLE_SYNTH_CONTROL
-    TaskReporting_PrintCsvTask(SCHED_ALGO_NAME, WORKLOAD_SCENARIO_NAME,
-                               WORKLOAD_UTILIZATION_PERCENT, "CONTROL", &tau_control,
-                               TAU_CONTROL_WORKLOAD_US, snapshot_us);
-  #endif
 
   uart_print("=======================================\r\n\r\n");
 }
@@ -845,43 +799,39 @@ static void Tasks_Init(void)
 {
   uint64_t now_us = scheduler_now_us();
 
-	#if ENABLE_REAL_TAU1
-	  Task_InitPeriodic(&tau1, "tau1_hcsr04", TAU1_PERIOD_US,
-	                    TAU1_PERIOD_MS, now_us);
+	#if ENABLE_HCSR04
+	  Task_InitPeriodic(&hcsr04_task, "hcsr04", HCSR04_PERIOD_US,
+	                    HCSR04_PERIOD_MS, now_us);
 
     #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
       HCSR04_Async_Reset();
     #endif
 	#endif
 
-	#if ENABLE_REAL_TAU2
-	  Task_InitPeriodic(&tau2, "tau2_dht11", TAU2_PERIOD_US,
-	                    TAU2_PERIOD_MS, now_us);
+	#if ENABLE_DHT11
+	  Task_InitPeriodic(&dht11_task, "dht11", DHT11_PERIOD_US,
+	                    DHT11_PERIOD_MS, now_us);
 
     #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
       DHT11_Async_Reset();
     #endif
 	#endif
 
-  #if ENABLE_SYNTH_IMU
-    Task_InitPeriodic(&tau_imu, "tau_imu_synthetic", TAU_IMU_PERIOD_US,
-                      TAU_IMU_PERIOD_MS, now_us);
+  #if ENABLE_TAU1
+    Task_InitPeriodic(&tau1, "tau1", TAU1_PERIOD_US,
+                      TAU1_PERIOD_MS, now_us);
   #endif
 
-	#if ENABLE_SYNTH_LIDAR
-	  Task_InitPeriodic(&tau_lidar, "tau_lidar_synthetic", TAU_LIDAR_PERIOD_US,
-	                    TAU_LIDAR_PERIOD_MS, now_us);
+	#if ENABLE_TAU2
+	  Task_InitPeriodic(&tau2, "tau2", TAU2_PERIOD_US,
+	                    TAU2_PERIOD_MS, now_us);
 	#endif
 
-	#if ENABLE_SYNTH_CAMERA
-	  Task_InitPeriodic(&tau_camera, "tau_camera_synthetic", TAU_CAMERA_PERIOD_US,
-	                    TAU_CAMERA_PERIOD_MS, now_us);
+	#if ENABLE_TAU3
+	  Task_InitPeriodic(&tau3, "tau3", TAU3_PERIOD_US,
+	                    TAU3_PERIOD_MS, now_us);
 	#endif
 
-	#if ENABLE_SYNTH_CONTROL
-	  Task_InitPeriodic(&tau_control, "tau_control_synthetic", TAU_CONTROL_PERIOD_US,
-	                    TAU_CONTROL_PERIOD_MS, now_us);
-	#endif
 }
 
 
@@ -945,7 +895,7 @@ int main(void)
            "Workload scenario: %s\r\n",
            WORKLOAD_SCENARIO_NAME);
   uart_print(msg);
-  #if ENABLE_REAL_TAU1 || ENABLE_REAL_TAU2
+  #if ENABLE_HCSR04 || ENABLE_DHT11
     uart_print("Real sensor tasks are enabled\r\n");
   #else
     uart_print("Real sensor tasks are disabled\r\n");
@@ -958,23 +908,23 @@ int main(void)
   g_profile_start_us = scheduler_now_us();
   g_profile_start_ms = HAL_GetTick();
 
-  #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_TAU1
-    IsolatedProfile_Run(&tau1, Tau1_Run,
-                        "\r\n=== ISOLATED TAU1 HC-SR04 PROFILE ===\r\n",
-                        "Only tau1 is running. No tau2. No scheduler competition.\r\n",
+  #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_HCSR04
+    IsolatedProfile_Run(&hcsr04_task, HCSR04_Run,
+                        "\r\n=== ISOLATED HC-SR04 PROFILE ===\r\n",
+                        "Only hcsr04_task is running. No dht11_task. No scheduler competition.\r\n",
                         PROFILE_WINDOW_MS,
                         (SCHEDULER_MODE == SCHED_WFI_OPTIMIZED) ? 1U : 0U,
-                        Reset_Profiling_Stats, ProfileSamples_SaveTau1,
+                        Reset_Profiling_Stats, ProfileSamples_SaveHCSR04,
                         Print_Profiling_Summary);
   #endif
 
-  #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_TAU2
-    IsolatedProfile_Run(&tau2, Tau2_Run,
-                        "\r\n=== ISOLATED TAU2 DHT11 PROFILE ===\r\n",
-                        "Only tau2 is running. No tau1. No scheduler competition.\r\n",
+  #if EXPERIMENT_MODE == EXPERIMENT_ISOLATED_DHT11
+    IsolatedProfile_Run(&dht11_task, DHT11_Run,
+                        "\r\n=== ISOLATED DHT11 PROFILE ===\r\n",
+                        "Only dht11_task is running. No hcsr04_task. No scheduler competition.\r\n",
                         PROFILE_WINDOW_MS,
                         (SCHEDULER_MODE == SCHED_WFI_OPTIMIZED) ? 1U : 0U,
-                        Reset_Profiling_Stats, ProfileSamples_SaveTau2,
+                        Reset_Profiling_Stats, ProfileSamples_SaveDHT11,
                         Print_Profiling_Summary);
   #endif
   #endif
@@ -985,8 +935,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    #if SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF
     uint32_t sched_start_cycles;
     uint32_t sched_end_cycles;
+    #endif
     uint32_t scheduler_cycles_this_loop = 0;
 
     uint64_t now_us = scheduler_now_us();
@@ -999,93 +951,59 @@ int main(void)
      * Each task has its own next_release_us.
      * A task is ready when now_us >= next_release_us.
      *
-     * Real sensors can be disabled completely for synthetic-only
+     * Real sensors can be disabled completely for workload-only
      * scheduling experiments.
      */
 
     #if SCHED_ALGO == SCHED_ALGO_SUPERLOOP
 
-    #if ENABLE_REAL_TAU1
-      sched_start_cycles = DWT->CYCCNT;
+    #if ENABLE_HCSR04
+      uint64_t hcsr04_task_release_us;
+      uint8_t hcsr04_task_ready = SuperLoop_MeasureReadiness(
+          &hcsr04_task, now_us, &hcsr04_task_release_us, &scheduler_cycles_this_loop);
+    #else
+      uint8_t hcsr04_task_ready = 0;
+      uint64_t hcsr04_task_release_us = 0;
+    #endif
 
-      uint8_t tau1_ready = ((int64_t)(now_us - tau1.next_release_us) >= 0);
-      uint64_t tau1_release_us = tau1.next_release_us;
 
-      sched_end_cycles = DWT->CYCCNT;
-      scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
+    #if ENABLE_DHT11
+      uint64_t dht11_task_release_us;
+      uint8_t dht11_task_ready = SuperLoop_MeasureReadiness(
+          &dht11_task, now_us, &dht11_task_release_us, &scheduler_cycles_this_loop);
+    #else
+      uint8_t dht11_task_ready = 0;
+      uint64_t dht11_task_release_us = 0;
+    #endif
+
+
+    #if ENABLE_TAU1
+      uint64_t tau1_release_us;
+      uint8_t tau1_ready = SuperLoop_MeasureReadiness(
+          &tau1, now_us, &tau1_release_us, &scheduler_cycles_this_loop);
     #else
       uint8_t tau1_ready = 0;
       uint64_t tau1_release_us = 0;
     #endif
 
 
-    #if ENABLE_REAL_TAU2
-      sched_start_cycles = DWT->CYCCNT;
-
-      uint8_t tau2_ready = ((int64_t)(now_us - tau2.next_release_us) >= 0);
-      uint64_t tau2_release_us = tau2.next_release_us;
-
-      sched_end_cycles = DWT->CYCCNT;
-      scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
+    #if ENABLE_TAU2
+      uint64_t tau2_release_us;
+      uint8_t tau2_ready = SuperLoop_MeasureReadiness(
+          &tau2, now_us, &tau2_release_us, &scheduler_cycles_this_loop);
     #else
       uint8_t tau2_ready = 0;
       uint64_t tau2_release_us = 0;
     #endif
 
 
-    #if ENABLE_SYNTH_IMU
-      sched_start_cycles = DWT->CYCCNT;
-
-      uint8_t tau_imu_ready = ((int64_t)(now_us - tau_imu.next_release_us) >= 0);
-      uint64_t tau_imu_release_us = tau_imu.next_release_us;
-
-      sched_end_cycles = DWT->CYCCNT;
-      scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
+    #if ENABLE_TAU3
+      uint64_t tau3_release_us;
+      uint8_t tau3_ready = SuperLoop_MeasureReadiness(
+          &tau3, now_us, &tau3_release_us, &scheduler_cycles_this_loop);
     #else
-      uint8_t tau_imu_ready = 0;
-      uint64_t tau_imu_release_us = 0;
-    #endif
-
-
-    #if ENABLE_SYNTH_CONTROL
-      sched_start_cycles = DWT->CYCCNT;
-
-      uint8_t tau_control_ready = ((int64_t)(now_us - tau_control.next_release_us) >= 0);
-      uint64_t tau_control_release_us = tau_control.next_release_us;
-
-      sched_end_cycles = DWT->CYCCNT;
-      scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
-    #else
-      uint8_t tau_control_ready = 0;
-      uint64_t tau_control_release_us = 0;
-    #endif
-
-
-    #if ENABLE_SYNTH_LIDAR
-      sched_start_cycles = DWT->CYCCNT;
-
-      uint8_t tau_lidar_ready = ((int64_t)(now_us - tau_lidar.next_release_us) >= 0);
-      uint64_t tau_lidar_release_us = tau_lidar.next_release_us;
-
-      sched_end_cycles = DWT->CYCCNT;
-      scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
-    #else
-      uint8_t tau_lidar_ready = 0;
-      uint64_t tau_lidar_release_us = 0;
-    #endif
-
-
-    #if ENABLE_SYNTH_CAMERA
-      sched_start_cycles = DWT->CYCCNT;
-
-      uint8_t tau_camera_ready = ((int64_t)(now_us - tau_camera.next_release_us) >= 0);
-      uint64_t tau_camera_release_us = tau_camera.next_release_us;
-
-      sched_end_cycles = DWT->CYCCNT;
-      scheduler_cycles_this_loop += (uint32_t)(sched_end_cycles - sched_start_cycles);
-    #else
-      uint8_t tau_camera_ready = 0;
-      uint64_t tau_camera_release_us = 0;
+      uint8_t tau3_ready = 0;
+      uint64_t tau3_release_us = 0;
     #endif
 
 
@@ -1094,12 +1012,11 @@ int main(void)
     #endif
 
     uint8_t any_task_ready =
+        hcsr04_task_ready ||
+        dht11_task_ready ||
         tau1_ready ||
         tau2_ready ||
-        tau_imu_ready ||
-        tau_control_ready ||
-        tau_lidar_ready ||
-        tau_camera_ready;
+        tau3_ready;
 
     if (any_task_ready)
     {
@@ -1112,13 +1029,12 @@ int main(void)
      * Execution phase
      * ============================================================
      *
-     * Synthetic-only baseline order:
+     * workload-only baseline order:
      *
-     *   tau_IMU -> tau_LiDAR -> tau_Camera
+     *   tau1 -> tau2 -> tau3
      *
      * Optional tasks:
-     *   tau_Control can be re-enabled later.
-     *   tau1/tau2 are disabled for pure scheduler analysis.
+     *   hcsr04_task/dht11_task are disabled for pure scheduler analysis.
      *
      * Deadline miss:
      *   executed activation finished after its absolute deadline.
@@ -1128,14 +1044,15 @@ int main(void)
      *   task was still not accounted/executed separately.
      */
 
-    #if ENABLE_SYNTH_CONTROL
-      if (tau_control_ready)
+
+    #if ENABLE_HCSR04
+      if (hcsr04_task_ready)
       {
-        uint64_t release_us = tau_control_release_us;
+        uint64_t release_us = hcsr04_task_release_us;
 
         uint64_t exec_start = micros();
 
-        Tau_Control_Run();
+        HCSR04_Run();
 
         uint64_t exec_finish = micros();
         uint64_t finish_us = scheduler_now_us();
@@ -1143,16 +1060,17 @@ int main(void)
         uint64_t exec_time = exec_finish - exec_start;
         uint64_t response_time = finish_us - release_us;
 
-        Task_UpdateExecStats(&tau_control, exec_time);
-        Task_UpdateResponseStats(&tau_control, response_time);
-        Task_CheckDeadline(&tau_control, response_time);
+        Task_UpdateExecStats(&hcsr04_task, exec_time);
+        Task_SaveExecSample(&hcsr04_task, exec_time);
+        Task_UpdateResponseStats(&hcsr04_task, response_time);
+        Task_CheckDeadline(&hcsr04_task, response_time);
 
-        Task_AdvanceRelease(&tau_control, finish_us);
+        Task_AdvanceRelease(&hcsr04_task, finish_us);
       }
     #endif
 
 
-    #if ENABLE_REAL_TAU1
+    #if ENABLE_TAU1
       if (tau1_ready)
       {
         uint64_t release_us = tau1_release_us;
@@ -1168,7 +1086,6 @@ int main(void)
         uint64_t response_time = finish_us - release_us;
 
         Task_UpdateExecStats(&tau1, exec_time);
-        Task_SaveExecSample(&tau1, exec_time);
         Task_UpdateResponseStats(&tau1, response_time);
         Task_CheckDeadline(&tau1, response_time);
 
@@ -1177,78 +1094,7 @@ int main(void)
     #endif
 
 
-    #if ENABLE_SYNTH_LIDAR
-      if (tau_lidar_ready)
-      {
-        uint64_t release_us = tau_lidar_release_us;
-
-        uint64_t exec_start = micros();
-
-        Tau_LiDAR_Run();
-
-        uint64_t exec_finish = micros();
-        uint64_t finish_us = scheduler_now_us();
-
-        uint64_t exec_time = exec_finish - exec_start;
-        uint64_t response_time = finish_us - release_us;
-
-        Task_UpdateExecStats(&tau_lidar, exec_time);
-        Task_UpdateResponseStats(&tau_lidar, response_time);
-        Task_CheckDeadline(&tau_lidar, response_time);
-
-        Task_AdvanceRelease(&tau_lidar, finish_us);
-      }
-    #endif
-
-	#if ENABLE_SYNTH_IMU
-      if (tau_imu_ready)
-      {
-        uint64_t release_us = tau_imu_release_us;
-
-        uint64_t exec_start = micros();
-
-        Tau_IMU_Run();
-
-        uint64_t exec_finish = micros();
-        uint64_t finish_us = scheduler_now_us();
-
-        uint64_t exec_time = exec_finish - exec_start;
-        uint64_t response_time = finish_us - release_us;
-
-        Task_UpdateExecStats(&tau_imu, exec_time);
-        Task_UpdateResponseStats(&tau_imu, response_time);
-        Task_CheckDeadline(&tau_imu, response_time);
-
-        Task_AdvanceRelease(&tau_imu, finish_us);
-      }
-    #endif
-
-
-    #if ENABLE_SYNTH_CAMERA
-      if (tau_camera_ready)
-      {
-        uint64_t release_us = tau_camera_release_us;
-
-        uint64_t exec_start = micros();
-
-        Tau_Camera_Run();
-
-        uint64_t exec_finish = micros();
-        uint64_t finish_us = scheduler_now_us();
-
-        uint64_t exec_time = exec_finish - exec_start;
-        uint64_t response_time = finish_us - release_us;
-
-        Task_UpdateExecStats(&tau_camera, exec_time);
-        Task_UpdateResponseStats(&tau_camera, response_time);
-        Task_CheckDeadline(&tau_camera, response_time);
-
-        Task_AdvanceRelease(&tau_camera, finish_us);
-      }
-    #endif
-
-
-    #if ENABLE_REAL_TAU2
+    #if ENABLE_TAU2
       if (tau2_ready)
       {
         uint64_t release_us = tau2_release_us;
@@ -1264,11 +1110,59 @@ int main(void)
         uint64_t response_time = finish_us - release_us;
 
         Task_UpdateExecStats(&tau2, exec_time);
-        Task_SaveExecSample(&tau2, exec_time);
         Task_UpdateResponseStats(&tau2, response_time);
         Task_CheckDeadline(&tau2, response_time);
 
         Task_AdvanceRelease(&tau2, finish_us);
+      }
+    #endif
+
+
+    #if ENABLE_TAU3
+      if (tau3_ready)
+      {
+        uint64_t release_us = tau3_release_us;
+
+        uint64_t exec_start = micros();
+
+        Tau3_Run();
+
+        uint64_t exec_finish = micros();
+        uint64_t finish_us = scheduler_now_us();
+
+        uint64_t exec_time = exec_finish - exec_start;
+        uint64_t response_time = finish_us - release_us;
+
+        Task_UpdateExecStats(&tau3, exec_time);
+        Task_UpdateResponseStats(&tau3, response_time);
+        Task_CheckDeadline(&tau3, response_time);
+
+        Task_AdvanceRelease(&tau3, finish_us);
+      }
+    #endif
+
+
+    #if ENABLE_DHT11
+      if (dht11_task_ready)
+      {
+        uint64_t release_us = dht11_task_release_us;
+
+        uint64_t exec_start = micros();
+
+        DHT11_Run();
+
+        uint64_t exec_finish = micros();
+        uint64_t finish_us = scheduler_now_us();
+
+        uint64_t exec_time = exec_finish - exec_start;
+        uint64_t response_time = finish_us - release_us;
+
+        Task_UpdateExecStats(&dht11_task, exec_time);
+        Task_SaveExecSample(&dht11_task, exec_time);
+        Task_UpdateResponseStats(&dht11_task, response_time);
+        Task_CheckDeadline(&dht11_task, response_time);
+
+        Task_AdvanceRelease(&dht11_task, finish_us);
       }
     #endif
 
@@ -1308,7 +1202,7 @@ int main(void)
 
       if (now_debug_us >= next_debug_us)
       {
-        DebugStatus_Print(tau1.run_count, tau2.run_count, g_distance_cm,
+        DebugStatus_Print(hcsr04_task.run_count, dht11_task.run_count, g_distance_cm,
                           g_temp, g_hum, g_dht_res);
         next_debug_us = now_debug_us + DEBUG_PERIOD_US;
       }
@@ -1337,34 +1231,30 @@ int main(void)
       g_profile_start_us = scheduler_now_us();
       g_profile_start_ms = HAL_GetTick();
 
-      #if ENABLE_REAL_TAU1
+      #if ENABLE_HCSR04
+        hcsr04_task.next_release_us = g_profile_start_us + hcsr04_task.period_us;
+        hcsr04_task.next_release_ms = (uint32_t)(hcsr04_task.next_release_us / 1000ULL);
+      #endif
+
+      #if ENABLE_DHT11
+        dht11_task.next_release_us = g_profile_start_us + dht11_task.period_us;
+        dht11_task.next_release_ms = (uint32_t)(dht11_task.next_release_us / 1000ULL);
+      #endif
+
+      #if ENABLE_TAU1
         tau1.next_release_us = g_profile_start_us + tau1.period_us;
         tau1.next_release_ms = (uint32_t)(tau1.next_release_us / 1000ULL);
       #endif
 
-      #if ENABLE_REAL_TAU2
+
+      #if ENABLE_TAU2
         tau2.next_release_us = g_profile_start_us + tau2.period_us;
         tau2.next_release_ms = (uint32_t)(tau2.next_release_us / 1000ULL);
       #endif
 
-      #if ENABLE_SYNTH_IMU
-        tau_imu.next_release_us = g_profile_start_us + tau_imu.period_us;
-        tau_imu.next_release_ms = (uint32_t)(tau_imu.next_release_us / 1000ULL);
-      #endif
-
-      #if ENABLE_SYNTH_CONTROL
-        tau_control.next_release_us = g_profile_start_us + tau_control.period_us;
-        tau_control.next_release_ms = (uint32_t)(tau_control.next_release_us / 1000ULL);
-      #endif
-
-      #if ENABLE_SYNTH_LIDAR
-        tau_lidar.next_release_us = g_profile_start_us + tau_lidar.period_us;
-        tau_lidar.next_release_ms = (uint32_t)(tau_lidar.next_release_us / 1000ULL);
-      #endif
-
-      #if ENABLE_SYNTH_CAMERA
-        tau_camera.next_release_us = g_profile_start_us + tau_camera.period_us;
-        tau_camera.next_release_ms = (uint32_t)(tau_camera.next_release_us / 1000ULL);
+      #if ENABLE_TAU3
+        tau3.next_release_us = g_profile_start_us + tau3.period_us;
+        tau3.next_release_ms = (uint32_t)(tau3.next_release_us / 1000ULL);
       #endif
     }
 
@@ -1372,7 +1262,7 @@ int main(void)
     /*
      * Optional WFI mode.
      *
-     * For the current synthetic-only busy baseline, keep:
+     * For the current workload-only busy baseline, keep:
      *   SCHEDULER_MODE = SCHED_BUSY_POLLING
      *
      * WFI can be tested later separately.
@@ -1658,7 +1548,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PC0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
-  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_HCSR04
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   #else
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -1666,7 +1556,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_REAL_TAU1
+  #if (SCHED_ALGO == SCHED_ALGO_CHUNKED_EDF) && ENABLE_HCSR04
   /* HC-SR04 ECHO is captured by EXTI0; ISR only records edge events. */
   HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI0_IRQn);

@@ -14,7 +14,7 @@
 #define SCHED_ALGO_SUPERLOOP 0
 #define SCHED_ALGO_CHUNKED_EDF 1
 
-/* Synthetic workload scenarios. */
+/* workload workload scenarios. */
 #define WORKLOAD_SCENARIO_U50 0
 #define WORKLOAD_SCENARIO_U65 1
 #define WORKLOAD_SCENARIO_U80 2
@@ -26,8 +26,8 @@
 
 /* Experiment modes. */
 #define EXPERIMENT_INTEGRATED 0
-#define EXPERIMENT_ISOLATED_TAU1 1
-#define EXPERIMENT_ISOLATED_TAU2 2
+#define EXPERIMENT_ISOLATED_HCSR04 1
+#define EXPERIMENT_ISOLATED_DHT11 2
 #define EXPERIMENT_MINIMAL_SUPERLOOP_PROFILE 3
 #define EXPERIMENT_SUPERLOOP_CHECKS_PROFILE 4
 #define EXPERIMENT_SUPERLOOP_SCALABILITY_CLEAN 5
@@ -49,9 +49,9 @@
   #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
 #endif
 
-/* 2 = IMU + LiDAR; 3 = IMU + LiDAR + Camera (integrated mode only). */
-#ifndef INTEGRATED_SYNTH_TASK_COUNT
-  #define INTEGRATED_SYNTH_TASK_COUNT 2
+/* 2 = tau1 + tau2; 3 = tau1 + tau2 + tau3 (integrated mode only). */
+#ifndef INTEGRATED_TASK_COUNT
+  #define INTEGRATED_TASK_COUNT 2
 #endif
 
 /* Measurement windows, in microseconds. */
@@ -75,24 +75,30 @@
   #define EDF_CHUNK_US 1000ULL
 #endif
 
-#ifndef ENABLE_REAL_TAU1
-  #define ENABLE_REAL_TAU1 1
+/* Physical HC-SR04 ultrasonic distance sensor; requires connected hardware. */
+#ifndef ENABLE_HCSR04
+  #define ENABLE_HCSR04 1
 #endif
 
-#ifndef ENABLE_REAL_TAU2
-  #define ENABLE_REAL_TAU2 1
+/* Physical DHT11 temperature/humidity sensor; requires connected hardware. */
+#ifndef ENABLE_DHT11
+  #define ENABLE_DHT11 1
 #endif
 
-#ifndef ENABLE_SYNTH_IMU
-  #define ENABLE_SYNTH_IMU 0
+/* Periodic test task tau1: T = D = 10 ms, timed CPU workload, no sensor. */
+#ifndef ENABLE_TAU1
+  #define ENABLE_TAU1 0
 #endif
 
-#ifndef ENABLE_SYNTH_LIDAR
-  #define ENABLE_SYNTH_LIDAR 0
+/* Periodic test task tau2: T = D = 50 ms, timed CPU workload, no sensor. */
+#ifndef ENABLE_TAU2
+  #define ENABLE_TAU2 0
 #endif
 
-#ifndef ENABLE_SYNTH_CONTROL
-  #define ENABLE_SYNTH_CONTROL 0
+/* Periodic test task tau3: T = D = 200 ms, timed CPU workload, no sensor.
+ * Enabled by default for the three-task experiment configuration. */
+#ifndef ENABLE_TAU3
+  #define ENABLE_TAU3 (INTEGRATED_TASK_COUNT == 3)
 #endif
 
 #ifndef ENABLE_DEBUG_PRINT

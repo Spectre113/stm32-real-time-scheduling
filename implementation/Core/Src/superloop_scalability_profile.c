@@ -122,7 +122,7 @@ void SuperloopScalabilityProfile_RunClean(void)
       if (now_us >= task->next_release_us)
       {
         uint32_t task_start_cycles = DWT->CYCCNT;
-        Synthetic_Workload_us(task->workload_us);
+        Workload_RunUs(task->workload_us);
         uint32_t task_end_cycles = DWT->CYCCNT;
         uint64_t finish_us;
 
@@ -254,7 +254,7 @@ void SuperloopScalabilityProfile_RunChecks(void)
       if (task_ready != 0U)
       {
         uint32_t task_start_cycles = DWT->CYCCNT;
-        Synthetic_Workload_us(task->workload_us);
+        Workload_RunUs(task->workload_us);
         uint32_t task_end_cycles = DWT->CYCCNT;
         uint32_t release_start_cycles;
         uint32_t release_end_cycles;

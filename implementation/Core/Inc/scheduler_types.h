@@ -48,7 +48,7 @@ typedef void (*TaskRunFn)(void);
 
 typedef enum
 {
-  SCHED_TASK_SYNTHETIC = 0,
+  SCHED_TASK_WORKLOAD = 0,
   SCHED_TASK_STAGED_HCSR04,
   SCHED_TASK_STAGED_DHT11
 } SchedTaskKind_t;

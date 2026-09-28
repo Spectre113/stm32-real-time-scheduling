@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-void DebugStatus_Print(uint32_t tau1_runs,
-                       uint32_t tau2_runs,
+void DebugStatus_Print(uint32_t hcsr04_runs,
+                       uint32_t dht11_runs,
                        int distance_cm,
                        uint8_t temp,
                        uint8_t hum,

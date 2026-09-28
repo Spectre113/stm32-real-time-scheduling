@@ -78,8 +78,8 @@ SUMMARY_FIELDS = [
     "U",
     "WINDOW_US",
     "DEVICE_WINDOW_TARGET_US",
-    "SYNTH_U_X10000",
-    "REAL_TASKS",
+    "TAU_U_X10000",
+    "SENSOR_TASKS",
     "TAU1_RUNS",
     "TAU2_RUNS",
     "TAU3_RUNS",
@@ -98,7 +98,7 @@ SUMMARY_FIELDS = [
     "CHECKS_CYCLES",
     "CHECKS_US",
     "CHECKS_PCT",
-    "SYNTH_TASKS",
+    "TAU_TASKS",
     "SCHED",
     "CHUNK_US",
     "EXTENDED_STATS",
@@ -259,17 +259,17 @@ def render_config(spec: RunSpec, matrix: dict[str, Any]) -> str:
 #define WORKLOAD_SCENARIO {SCENARIO_MACROS[spec.scenario]}
 #define SCHED_ALGO {scheduler_macro}
 #define EXPERIMENT_MODE {MODE_MACROS[spec.mode]}
-#define INTEGRATED_SYNTH_TASK_COUNT {integrated_task_count}
+#define INTEGRATED_TASK_COUNT {integrated_task_count}
 #define PROFILE_WINDOW_US {integrated_window_us}ULL
 #define MINIMAL_PROFILE_WINDOW_US {spec.window_us}ULL
 #define SCALABILITY_PROFILE_WINDOW_US {scalability_window_us}ULL
 #define SCALABILITY_TASK_COUNT {scalability_task_count}
 #define EDF_CHUNK_US {edf_chunk_us}ULL
-#define ENABLE_REAL_TAU1 0
-#define ENABLE_REAL_TAU2 0
-#define ENABLE_SYNTH_IMU 1
-#define ENABLE_SYNTH_LIDAR 1
-#define ENABLE_SYNTH_CONTROL 0
+#define ENABLE_HCSR04 0
+#define ENABLE_DHT11 0
+#define ENABLE_TAU1 1
+#define ENABLE_TAU2 1
+#define ENABLE_TAU3 {int(integrated_task_count == 3)}
 #define ENABLE_DEBUG_PRINT 0
 #define ENABLE_EXTENDED_STATS {int(matrix.get("extended_stats", False)) if spec.mode in INTEGRATED_MODES else 1}
 #define ENABLE_POLLING_PROFILE 1
@@ -387,11 +387,11 @@ def validate_device_result(spec: RunSpec, device_result: dict[str, str], matrix:
             raise ValueError("Device requested window does not match configuration")
         if device_result.get("EXTENDED_STATS") != str(int(matrix.get("extended_stats", False))):
             raise ValueError("Device statistics mode does not match configuration")
-        if device_result.get("REAL_TASKS") != "0":
-            raise ValueError("Synthetic campaign must have physical sensors disabled")
-    if spec.mode in INTEGRATED_MODES and device_result.get("SYNTH_TASKS") != str(spec.task_count):
+        if device_result.get("SENSOR_TASKS") != "0":
+            raise ValueError("workload campaign must have physical sensors disabled")
+    if spec.mode in INTEGRATED_MODES and device_result.get("TAU_TASKS") != str(spec.task_count):
         raise ValueError(
-            f"Device reported SYNTH_TASKS={device_result.get('SYNTH_TASKS')!r}, "
+            f"Device reported TAU_TASKS={device_result.get('TAU_TASKS')!r}, "
             f"expected {spec.task_count}."
         )
 

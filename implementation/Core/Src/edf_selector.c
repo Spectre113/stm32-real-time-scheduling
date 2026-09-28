@@ -21,7 +21,7 @@ static uint8_t Scheduler_TaskReady(const SchedTaskRef_t *task_ref,
   {
     if (task_ref->kind == SCHED_TASK_STAGED_HCSR04)
     {
-      #if ENABLE_REAL_TAU1
+      #if ENABLE_HCSR04
       return HCSR04_Async_IsRunnable(now_us);
       #else
       return 0U;
@@ -30,7 +30,7 @@ static uint8_t Scheduler_TaskReady(const SchedTaskRef_t *task_ref,
 
     if (task_ref->kind == SCHED_TASK_STAGED_DHT11)
     {
-      #if ENABLE_REAL_TAU2
+      #if ENABLE_DHT11
       return DHT11_Async_IsRunnable(now_us);
       #else
       return 0U;
@@ -59,7 +59,7 @@ SchedTaskRef_t *Scheduler_SelectChunkedEDF(SchedTaskRef_t *tasks,
       continue;
     }
 
-    if ((tasks[i].kind == SCHED_TASK_SYNTHETIC) &&
+    if ((tasks[i].kind == SCHED_TASK_WORKLOAD) &&
         (tasks[i].workload_us == 0ULL))
     {
       continue;

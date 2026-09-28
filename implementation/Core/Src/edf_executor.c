@@ -23,7 +23,7 @@ void Scheduler_CompleteChunkedTask(Task_t *task)
   task->accumulated_exec_us = 0ULL;
 }
 
-#if ENABLE_REAL_TAU1
+#if ENABLE_HCSR04
 static void Scheduler_RunChunkedHCSR04(Task_t *task,
                                        EdfExecutorContext_t *context)
 {
@@ -58,7 +58,7 @@ static void Scheduler_RunChunkedHCSR04(Task_t *task,
 }
 #endif
 
-#if ENABLE_REAL_TAU2
+#if ENABLE_DHT11
 static void Scheduler_RunChunkedDHT11(Task_t *task,
                                       EdfExecutorContext_t *context)
 {
@@ -97,7 +97,7 @@ void Scheduler_RunChunkedTask(SchedTaskRef_t *selected,
 
   if (selected->kind == SCHED_TASK_STAGED_HCSR04)
   {
-    #if ENABLE_REAL_TAU1
+    #if ENABLE_HCSR04
     Scheduler_RunChunkedHCSR04(task, context);
     #endif
     return;
@@ -105,7 +105,7 @@ void Scheduler_RunChunkedTask(SchedTaskRef_t *selected,
 
   if (selected->kind == SCHED_TASK_STAGED_DHT11)
   {
-    #if ENABLE_REAL_TAU2
+    #if ENABLE_DHT11
     Scheduler_RunChunkedDHT11(task, context);
     #endif
     return;
@@ -123,7 +123,7 @@ void Scheduler_RunChunkedTask(SchedTaskRef_t *selected,
   if (task->remaining_exec_us < chunk_us) chunk_us = task->remaining_exec_us;
 
   uint64_t exec_start = micros();
-  Synthetic_Workload_us(chunk_us);
+  Workload_RunUs(chunk_us);
   uint64_t exec_finish = micros();
 
   task->accumulated_exec_us += exec_finish - exec_start;
