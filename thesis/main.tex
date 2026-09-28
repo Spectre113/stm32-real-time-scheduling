@@ -258,7 +258,6 @@ In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. The
 
 \subsection{Earliest Deadline First}
 \label{EDF_subsection}
-
 Unlike Super Loop, Earliest Deadline First (EDF) selects jobs according
 to their absolute deadlines.
 
@@ -277,7 +276,7 @@ Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table
 
 At $t=20$, $J_2^2$ is released with $d_2^2=40<d_1^1=50$ and preempts $J_1^1$. After $J_2^2$ completes at $t=30$, $J_1^1$ resumes and completes at $t=40$.
 
-In the STM32 implementation, synthetic jobs execute in chunks of maximum duration $\Delta$, with job selection repeated after each chunk. An earlier-deadline job released during a chunk may therefore wait until the chunk completes. Sensor jobs use separate staged handlers.
+Chunked EDF is used as a simplified prototype implementation, avoiding the additional complexity of full task-context switching during initial evaluation. Synthetic jobs execute in chunks of maximum duration $\Delta$, with job selection repeated after each chunk. An earlier-deadline job released during a chunk may therefore wait until the chunk completes. Sensor jobs use separate staged handlers.
 
 For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_2^2$ is released at $t=20$ ms and preempts $J_1^1$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_2^2$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
 
@@ -333,7 +332,7 @@ Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assum
 
 \section{Performance Evaluation}
 \subsection{Experimental setup}
-Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled for now. Each synthetic job executes a timed busy-wait workload, the scheduler also uses busy polling. Timing is obtained from the DWT cycle counter, and UART reports are emitted after measurement stops.
+Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled in these experiments. Each synthetic job executes a timed busy-wait workload, the scheduler also uses busy polling. Timing is obtained from the DWT cycle counter, and UART reports are emitted after measurement stops.
 
 The results below use three tasks with $(T_1,T_2,T_3)=(10,50,200)$ ms and $D_i=T_i$. Table~\ref{tab:experimental_workloads} lists the configured execution budgets. Thus, $U$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, Super Loop scans tasks in index order. For clarity, the illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation releases each task for the first time one period after initialization, $R_i^1=t_0+T_i$.
 
@@ -373,15 +372,10 @@ Measurement stops at the first loop boundary after $W$, its actual duration may 
 \subsection{Super Loop and EDF comparison}
 Fig.~\ref{fig:scheduler_comparison_tau1} compares the schedulers for $\tau_1$. Under Super Loop, its deadline-miss and skipped-release ratios generally increase with utilization, as does its average response time. With chunked EDF ($\Delta=1$ ms), no deadline misses or skipped releases are recorded for $\tau_1$ in the evaluated three-task configurations. Selecting jobs by absolute deadline reduces the blocking caused by the fixed Super Loop order.
 
-
-
 Fig.~\ref{fig:scheduler_comparison_tau3} shows the corresponding results for $\tau_3$. Its average response time under chunked EDF increases with utilization as jobs with earlier absolute deadlines execute first. At nominal $U=100\%$, no capacity is reserved for scheduling and execution overhead, deadline misses and skipped releases are observed for $\tau_3$. The lower response time of $\tau_3$ under Super Loop occurs alongside skipped releases of $\tau_1$, so it does not imply better service for the entire task set.
-
-
 
 \subsection{Effect of chunk duration}
 Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U=90\%$. Larger chunks reduce the frequency of scheduling decisions. In these measurements, the reported selection overhead decreases, while the average response time of $\tau_1$ increases and that of $\tau_3$ decreases. Longer non-preemptive intervals delay $\tau_1$, the result for $\tau_3$ also reflects the changed execution order and fewer scheduling interruptions. The overhead measurements remain preliminary pending validation of the instrumentation.
-
 
 \begin{figure*}[p]
 \centering
