@@ -10,14 +10,14 @@
 \usepackage{algpseudocode}
 \usepackage{placeins}
 \usepackage{stfloats}
+\usepackage[normalem]{ulem}
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
 \raggedbottom
 \begin{document}
 
-\title{Experimental Evaluation and Optimization of
-  Real-Time Scheduling on STM32}
+\title{Real-Time Scheduling for STM32:\\Performance Evaluation}
 \author{
 	\IEEEauthorblockN{Vladimir Toporkov, Artem Burmyakov}
 	\IEEEauthorblockA{
@@ -26,70 +26,83 @@
 }
 \maketitle
 
+
+
 \section{Introduction}
 \subsection{Contribution}
 
-Our contributions are about evaluation of schedulers for STM32 microcontroller:
-%
-\begin{itemize}
-\item we first implement Super Loop scheduler,
-\item then we implement chunked Earliest Deadline First (EDF) scheduler, and finally
-\item we evaluate their performance on a real STM32 hardware.
-\end{itemize}
+We evaluate the scheduling performance of the real-time Earliest Deadline First (EDF) over the default STM32 Super Loop scheduler.
+
+%For this, we implement both schedulers for a real hardware platform, and then conduct the range 
+%%
+%\begin{itemize}
+%\item we first implement Super Loop scheduler,
+%\item then we implement chunked Earliest Deadline First (EDF) scheduler, and finally
+%\item we evaluate their performance on a real STM32 hardware.
+%\end{itemize}
+
 
 \section{Background on STM32}
 
-The experimental platform consists of a uniprocessor STM32F767 microcontroller and external sensors connected through its hardware peripherals, as shown in Fig.~\ref{fig:stm32_hw}.
+The hardware platform, which we consider in our work, is depicted in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which is connected to four sensors:
+%
+\begin{itemize}
+\item DHT11: to measure temperature and humidity;
+\item HC-SR04: to measure distance;
+\item OV2640: to capture images;
+\item SPW2430: to acquire acoustic signal.
+\end{itemize}
 
-\begin{figure}[htbp]
+
+\begin{figure}[b]
   \centering
   \includegraphics[width=0.9\columnwidth]{stm32_hardware_platform.png}
-  \caption{STM32 hardware platform and connected sensors.}
+  \caption{Our experimental hardware platform.}
   \label{fig:stm32_hw}
 \end{figure}
 
-The hardware components are presented in Table~\ref{tab:hardware}.
+%The hardware components are presented in Table~\ref{tab:hardware}.
 
-\begin{table}[H]
-	\centering
-	\caption{Experimental hardware platform.}
-	\label{tab:hardware}
-
-	\small
-	\renewcommand{\arraystretch}{1.15}
-	\setlength{\tabcolsep}{6pt}
-
-	\begin{tabularx}{\columnwidth}{l>{\centering\arraybackslash}X}
-		\hline
-		\textbf{Component} &
-		\textbf{Purpose} \\
-		\hline
-
-		STM32F767 &
-		Scheduling and task execution \\
-
-		DHT11 &
-		Temperature and humidity measurement \\
-
-		HC-SR04 &
-		Distance measurement \\
-
-		OV2640 &
-		Image capturing \\
-
-		SPW2430 & 
-		Acoustic signal acquisition \\
-
-		\hline
-	\end{tabularx}
-\end{table}
+%\begin{table}[H]
+%	\centering
+%	\caption{Experimental hardware platform.}
+%	\label{tab:hardware}
+%	
+%	\small
+%	\renewcommand{\arraystretch}{1.15}
+%	\setlength{\tabcolsep}{6pt}
+%
+%	\begin{tabularx}{\columnwidth}{l>{\centering\arraybackslash}X}
+%		\hline
+%		\textbf{Component} &
+%		\textbf{Purpose} \\
+%		\hline
+%
+%		STM32F767 &
+%		Scheduling and task execution \\
+%
+%		DHT11 &
+%		Temperature and humidity measurement \\
+%
+%		HC-SR04 &
+%		Distance measurement \\
+%
+%		OV2640 &
+%		Image capturing \\
+%
+%		SPW2430 & 
+%		Acoustic signal acquisition \\
+%
+%		\hline
+%	\end{tabularx}
+%\end{table}
 
 \section{System Model}
 \label{sec:system_model}
 
 We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ executed on a uniprocessor. We consider only implicit deadlines, i.e, $D_i=T_i$. Each task $\tau_i=(C_i,T_i=D_i)$ generates a sequence of jobs $J_i^j$, where $j$ denotes the scheduled release index. Consecutive scheduled releases satisfy $R_i^{j+1}=R_i^j+T_i$.
 
-\begin{table}[htbp]
+\begin{table}[b]
   \centering
   \caption{System model notation.}
   \label{tab:system_model}
