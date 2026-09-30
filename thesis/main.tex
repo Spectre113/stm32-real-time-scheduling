@@ -11,13 +11,14 @@
 \usepackage{placeins}
 \usepackage{stfloats}
 \usepackage[normalem]{ulem}
+\usepackage{nicefrac}
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
 \raggedbottom
 \begin{document}
 
-\title{Real-Time Scheduling for STM32:\\Performance Evaluation}
+\title{Real-Time Schedulers for STM32:\\Performance Evaluation of EDF over SuperLoop}
 \author{
 	\IEEEauthorblockN{Vladimir Toporkov, Artem Burmyakov}
 	\IEEEauthorblockA{
@@ -28,10 +29,24 @@
 
 
 
+\listoftodos
+
+
 \section{Introduction}
+
+\todo{AB: To introduce one paragraph per each point:}
+\begin{enumerate}
+\item STM32 microcontroller;
+\item Tasks from peripheral sensors;
+\item Real-time scheduling: SuperLoop and EDF.
+\end{enumerate}
+
+\todo{AB: Can we spell ``SuperLoop" instead of ``Super Loop"?}
+
+
 \subsection{Contribution}
 
-We evaluate the scheduling performance of the real-time Earliest Deadline First (EDF) over the default STM32 Super Loop scheduler.
+We evaluate the scheduling performance of EDF over the default Super Loop scheduler for STM32 systems. Our implementations for both schedulers are publicly available.
 
 %For this, we implement both schedulers for a real hardware platform, and then conduct the range 
 %%
@@ -44,7 +59,7 @@ We evaluate the scheduling performance of the real-time Earliest Deadline First 
 
 \section{Background on STM32}
 
-The hardware platform, which we consider in our work, is depicted in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which is connected to four sensors:
+We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which in turn is connected to four sensors:
 %
 \begin{itemize}
 \item DHT11: to measure temperature and humidity;
@@ -53,7 +68,6 @@ The hardware platform, which we consider in our work, is depicted in Fig.~\ref{f
 \item SPW2430: to acquire acoustic signal.
 \end{itemize}
 
-
 \begin{figure}[b]
   \centering
   \includegraphics[width=0.9\columnwidth]{stm32_hardware_platform.png}
@@ -61,46 +75,40 @@ The hardware platform, which we consider in our work, is depicted in Fig.~\ref{f
   \label{fig:stm32_hw}
 \end{figure}
 
-%The hardware components are presented in Table~\ref{tab:hardware}.
 
-%\begin{table}[H]
-%	\centering
-%	\caption{Experimental hardware platform.}
-%	\label{tab:hardware}
-%	
-%	\small
-%	\renewcommand{\arraystretch}{1.15}
-%	\setlength{\tabcolsep}{6pt}
-%
-%	\begin{tabularx}{\columnwidth}{l>{\centering\arraybackslash}X}
-%		\hline
-%		\textbf{Component} &
-%		\textbf{Purpose} \\
-%		\hline
-%
-%		STM32F767 &
-%		Scheduling and task execution \\
-%
-%		DHT11 &
-%		Temperature and humidity measurement \\
-%
-%		HC-SR04 &
-%		Distance measurement \\
-%
-%		OV2640 &
-%		Image capturing \\
-%
-%		SPW2430 & 
-%		Acoustic signal acquisition \\
-%
-%		\hline
-%	\end{tabularx}
-%\end{table}
 
 \section{System Model}
 \label{sec:system_model}
 
-We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ executed on a uniprocessor. We consider only implicit deadlines, i.e, $D_i=T_i$. Each task $\tau_i=(C_i,T_i=D_i)$ generates a sequence of jobs $J_i^j$, where $j$ denotes the scheduled release index. Consecutive scheduled releases satisfy $R_i^{j+1}=R_i^j+T_i$.
+We rely on a classical real-time periodic system model by Liu and Layland~\todo{AB: to create a .bib file and add reference}. We reuse the system model notation from \todo{AB: to put reference to Burmyakov2026.}
+
+\todo{AB: Let us reuse the notation from that paper.}
+
+A real-time system $\mathcal{T}$ is modeled by a set of $n$ \emph{periodic tasks} $\{\tau_1,\ldots, \tau_n\}$, where each task $\tau_i = (C_i, D_i, P_i)$ is modeled by the worst-case \emph{execution time} $C_i$, a \emph{period} $P_i$ between the releases of consecutive jobs, and a \emph{relative implicit deadline} $D_i = Pi$. Also, the quantity $U_i=\nicefrac{C_i}{P_i}$ is the task \emph{utilization} and $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ is the utilization of the entire task set $\mathcal{T}$. Each task $\tau_i \in \mathcal{T}$ releases a potentially infinite sequence of \emph{jobs} of the period $P_i$: if $\tau_i$ releases its $j$-th job at time $r_{i,j}$, then it releases its next job exactly at time $r_{i,j+1}$, such that
+%
+\begin{equation}
+  \label{eq:constr_releases}
+  r_{i,j+1} = r_{i,j}+P_i.
+\end{equation}
+%
+Any $j$-th job of $\tau_i$ released at $r_{i,j}$ requires at most $C_i$ units of CPU time and must complete not later than the \emph{absolute deadline} $r_{i,j}+D_i$, otherwise the job is said to \emph{miss a deadline}.
+
+
+
+
+%We assume a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ to be executed on a uniprocessor. Each task is represented by parameters $\tau_i=(C_i, D_i = T_i)$ \todo{AB: Think to use ``$P_i$" instead of ``$T_i$"}, meaning that
+%
+%\begin{itemize}
+%\item $\tau_i$ generates an infinite sequence of jobs of the period $P_i$;
+%\item each job requires $C_i$ processor time units for completion;
+%\item each job has an implicit deadline $D_i = T_i$.
+%\end{itemize}
+%%
+%Moreover, we use $t_{i,j}^{\mathsf{r}}$ to denote the release time for the $j$-\textit{th} job of the task $\tau_i$, so that
+%%
+%\begin{equation}
+%t_{i,j+1}^{\mathsf{r}} = t_{i,j}^{\mathsf{r}} + T_i.
+%\end{equation}
 
 \begin{table}[b]
   \centering
@@ -126,7 +134,9 @@ We model the workload by a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\t
   \end{tabularx}
 \end{table}
 
-Table~\ref{tab:system_model} summarizes the notation. Release indices include skipped activations, for which no completion time is defined.
+\todo{AB: Can we avoid using the ``scheduled release" term? Could we use ``the release time of the $j$-\textit{th} job of the task $\tau_i$" or similar instead?}
+
+Release indices include skipped activations, for which no completion time is defined.
 
 \begin{itemize}
   \item A schedule specifies which job executes on the processor at each time instant, or whether the processor executes no job.
@@ -134,6 +144,13 @@ Table~\ref{tab:system_model} summarizes the notation. Release indices include sk
   \item A completed job $J_i^j$ has missed its deadline if $f_i^j>d_i^j$.
   \item The response time of a completed job $J_i^j$ is $f_i^j-R_i^j$, the time from its scheduled release to completion.
 \end{itemize}
+
+Table~\ref{tab:system_model} summarizes the notation introduced above.
+
+
+
+
+
 
 \section{Scheduling Principles}
 \label{sec:sched_principles}
