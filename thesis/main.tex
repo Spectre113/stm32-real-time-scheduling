@@ -80,18 +80,16 @@ We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw
 \section{System Model}
 \label{sec:system_model}
 
-We rely on a classical real-time periodic system model by Liu and Layland~\todo{AB: to create a .bib file and add reference}. We reuse the system model notation from \todo{AB: to put reference to Burmyakov2026.}
+We rely on a classical real-time periodic system model by Liu and Layland~\todo{AB: to create a .bib file and add reference}. We adopt the task and release notation of Burmyakov and Bini from \todo{AB: to put reference to Burmyakov2026.}
 
-\todo{AB: Let us reuse the notation from that paper.}
+A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on a uniprocessor. Each task $\tau_i=(C_i,D_i,P_i)$ has a worst-case execution time $C_i$, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$. Task utilization is $U_i=\nicefrac{C_i}{P_i}$, and task-set utilization is $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}}U_i$.
 
-A real-time system $\mathcal{T}$ is modeled by a set of $n$ \emph{periodic tasks} $\{\tau_1,\ldots, \tau_n\}$, where each task $\tau_i = (C_i, D_i, P_i)$ is modeled by the worst-case \emph{execution time} $C_i$, a \emph{period} $P_i$ between the releases of consecutive jobs, and a \emph{relative implicit deadline} $D_i = Pi$. Also, the quantity $U_i=\nicefrac{C_i}{P_i}$ is the task \emph{utilization} and $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ is the utilization of the entire task set $\mathcal{T}$. Each task $\tau_i \in \mathcal{T}$ releases a potentially infinite sequence of \emph{jobs} of the period $P_i$: if $\tau_i$ releases its $j$-th job at time $r_{i,j}$, then it releases its next job exactly at time $r_{i,j+1}$, such that
-%
+Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Unlike the sporadic model in the referenced paper, consecutive releases are separated by exactly $P_i$:
 \begin{equation}
   \label{eq:constr_releases}
-  r_{i,j+1} = r_{i,j}+P_i.
+  r_{i,j+1}=r_{i,j}+P_i.
 \end{equation}
-%
-Any $j$-th job of $\tau_i$ released at $r_{i,j}$ requires at most $C_i$ units of CPU time and must complete not later than the \emph{absolute deadline} $r_{i,j}+D_i$, otherwise the job is said to \emph{miss a deadline}.
+Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadline $r_{i,j}+D_i$. Its completion time, when executed to completion, is denoted by $f_{i,j}$. Release indices include jobs skipped by the implementation; these have no completion time.
 
 
 
@@ -122,30 +120,29 @@ Any $j$-th job of $\tau_i$ released at $r_{i,j}$ requires at most $C_i$ units of
     \hline
     $\mathcal{T}, n$ & Task set and number of tasks \\
     $\tau_i$ & Task $i$ \\
-    $C_i$ & Execution time of a job of $\tau_i$ \\
-    $T_i$ & Task period \\
-    $D_i=T_i$ & Relative deadline, equal to the period \\
-    $J_i^j$ & Job associated with the $j$-th scheduled release of $\tau_i$ \\
-    $R_i^j$ & Scheduled release time \\
-    $f_i^j$ & Completion time of an executed job \\
-    $d_i^j=R_i^j+D_i$ & Absolute deadline \\
-    $U=\sum_{i=1}^{n} C_i/T_i$ & Task-set utilization \\
+    $C_i$ & Worst-case execution time of a job of $\tau_i$ \\
+    $P_i$ & Task period \\
+    $D_i=P_i$ & Relative deadline, equal to the period \\
+    $J_{i,j}$ & The $j$-th job of task $\tau_i$ \\
+    $r_{i,j}$ & Release time of job $J_{i,j}$ \\
+    $f_{i,j}$ & Completion time of an executed job \\
+    $r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
+    $U_i=C_i/P_i$ & Task utilization \\
+    $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ & Task-set utilization \\
     \hline
   \end{tabularx}
 \end{table}
 
-\todo{AB: Can we avoid using the ``scheduled release" term? Could we use ``the release time of the $j$-\textit{th} job of the task $\tau_i$" or similar instead?}
-
-Release indices include skipped activations, for which no completion time is defined.
-
 \begin{itemize}
   \item A schedule specifies which job executes on the processor at each time instant, or whether the processor executes no job.
   \item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
-  \item A completed job $J_i^j$ has missed its deadline if $f_i^j>d_i^j$.
-  \item The response time of a completed job $J_i^j$ is $f_i^j-R_i^j$, the time from its scheduled release to completion.
+  \item A completed job $J_{i,j}$ has missed its deadline if $f_{i,j}>r_{i,j}+D_i$.
+  \item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$, the time from its release to completion.
 \end{itemize}
 
 Table~\ref{tab:system_model} summarizes the notation introduced above.
+
+In the existing schedule figures, $T_i$, $R_i^j$, and $J_i^j$ denote $P_i$, $r_{i,j}$, and $J_{i,j}$, respectively. The evaluation plots use $U$ as shorthand for $U_{\mathcal{T}}$.
 
 
 
@@ -164,7 +161,7 @@ The considered Super Loop scheduler repeatedly scans tasks in a fixed order and 
   \label{tab:superloop_tasks}
   \begin{tabular}{c|ccc}
     \hline
-    \textbf{Task} & $C_i$ & $T_i$ & $D_i$ \\
+    \textbf{Task} & $C_i$ & $P_i$ & $D_i$ \\
     \hline
     $\tau_1$ & 20 & 50 & 50 \\
     $\tau_2$ & 10 & 20 & 20 \\
@@ -181,9 +178,9 @@ The resulting Super Loop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
   \label{fig:superloop_schedule}
 \end{figure*}
 
-Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next scheduled release time of task $\tau_i$. During execution of $J_i^j$, the release variable $t_i^{next}$ retains $R_i^j$. At completion, $f_i^j$ denotes the completion time, and a deadline miss is recorded if $f_i^j>d_i^j$. The scheduler then advances $t_i^{next}$ by $T_i$. While $t_i^{next}<f_i^j$, the scheduled release at $t_i^{next}$ is counted as skipped and $t_i^{next}$ is advanced by $T_i$ again. A release at $t_i^{next}=f_i^j$ is retained.
+Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next release time of task $\tau_i$. During execution of $J_{i,j}$, the release variable $t_i^{next}$ retains $r_{i,j}$. At completion, $f_{i,j}$ denotes the completion time, and a deadline miss is recorded if $f_{i,j}>r_{i,j}+D_i$. The scheduler then advances $t_i^{next}$ by $P_i$. While $t_i^{next}<f_{i,j}$, the job with release time $t_i^{next}$ is counted as skipped and $t_i^{next}$ is advanced by $P_i$ again. A release at $t_i^{next}=f_{i,j}$ is retained.
 
-Algorithm~\ref{alg:superloop} summarizes the illustrated scheduling logic. Since $R_i^1=0$, the release index is $j=1+t_i^{next}/T_i$, including skipped releases. The clock used by \textsc{Now} starts at zero.
+Algorithm~\ref{alg:superloop} summarizes the illustrated scheduling logic. Since $r_{i,1}=0$, the release index is $j=1+t_i^{next}/P_i$, including skipped releases. The clock used by \textsc{Now} starts at zero.
 
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
@@ -213,14 +210,14 @@ The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
     -- \\
 
     20 & 50 & 0 &
-    $20 < R_1^1 + 50$ &
-    $20 < R_1^2$ \\
+    $20 < r_{1,1} + 50$ &
+    $20 < r_{1,2}$ \\
 
     30 & 50 & 40 &
-    \textbf{$30 > R_2^1 + 20$} &
+    \textbf{$30 > r_{2,1} + 20$} &
     \begin{tabular}{c}
-      \textbf{$30 > R_2^2$} \\
-      $30 < R_2^3$
+      \textbf{$30 > r_{2,2}$} \\
+      $30 < r_{2,3}$
     \end{tabular} \\
 
     40 & 50 & 40 &
@@ -228,14 +225,14 @@ The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
     -- \\
 
     50 & 50 & 60 &
-    $50 < R_2^3 + 20$ &
-    $50 < R_2^4$ \\
+    $50 < r_{2,3} + 20$ &
+    $50 < r_{2,4}$ \\
 
     \hline
   \end{tabularx}
 \end{table}
 
-In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. Then, $J_2^1$ executes until $t=30$, missing its deadline at $t=20$. At completion, the release scheduled for $R_2^2=20$ is counted as skipped and $t_2^{next}$ advances to $R_2^3=40$. Thus, no $J_2^2$ is executed.
+In Fig.~\ref{fig:superloop_schedule}, $J_{1,1}$ executes from $t=0$ to $t=20$. Then, $J_{2,1}$ executes until $t=30$, missing its deadline at $t=20$. At completion, the job released at $r_{2,2}=20$ is counted as skipped and $t_2^{next}$ advances to $r_{2,3}=40$. Thus, no $J_{2,2}$ is executed.
 
 \begin{algorithm}[!t]
 	\caption{Super Loop Scheduler}
@@ -257,22 +254,22 @@ In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. The
 
 		\If{$t^{cur} \geq t_i^{next}$}
 
-		\State $j \gets 1+t_i^{next}/T_i$
-		\State $R_i^j \gets t_i^{next}$
-		\State \Call{Execute}{$J_i^j$}
+		\State $j \gets 1+t_i^{next}/P_i$
+		\State $r_{i,j} \gets t_i^{next}$
+		\State \Call{Execute}{$J_{i,j}$}
 		\Comment{Non-preemptive}
 
-		\State $f_i^j \gets \Call{Now}{}$
+		\State $f_{i,j} \gets \Call{Now}{}$
 
-		\If{$f_i^j > R_i^j + D_i$}
-		\State \Call{RecordMiss}{$J_i^j$}
+		\If{$f_{i,j} > r_{i,j} + D_i$}
+		\State \Call{RecordMiss}{$J_{i,j}$}
 		\EndIf
 
-		\State $t_i^{next} \gets t_i^{next} + T_i$
+		\State $t_i^{next} \gets t_i^{next} + P_i$
 
-		\While{$t_i^{next} < f_i^j$}
+		\While{$t_i^{next} < f_{i,j}$}
 		\State \Call{RecordSkip}{$\tau_i, t_i^{next}$}
-		\State $t_i^{next} \gets t_i^{next} + T_i$
+		\State $t_i^{next} \gets t_i^{next} + P_i$
 		\EndWhile
 
 		\EndIf
@@ -291,7 +288,7 @@ In Fig.~\ref{fig:superloop_schedule}, $J_1^1$ executes from $t=0$ to $t=20$. The
 Unlike Super Loop, Earliest Deadline First (EDF) selects jobs according
 to their absolute deadlines.
 
-We first consider preemptive EDF with immediate preemption. At each scheduling decision, the ready job with the earliest absolute deadline $d_i^j$ is selected (Section~\ref{sec:system_model}). If a newly released job has an earlier absolute deadline than the running job, it preempts the running job.
+We first consider preemptive EDF with immediate preemption. At each scheduling decision, the ready job with the earliest absolute deadline $r_{i,j}+D_i$ is selected (Section~\ref{sec:system_model}). If a newly released job has an earlier absolute deadline than the running job, it preempts the running job.
 
 Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table~\ref{tab:superloop_tasks}.
 
@@ -304,11 +301,11 @@ Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table
 	\label{fig:edf_schedule}
 \end{figure*}
 
-At $t=20$, $J_2^2$ is released with $d_2^2=40<d_1^1=50$ and preempts $J_1^1$. After $J_2^2$ completes at $t=30$, $J_1^1$ resumes and completes at $t=40$.
+At $t=20$, $J_{2,2}$ is released with $r_{2,2}+D_2=40<r_{1,1}+D_1=50$ and preempts $J_{1,1}$. After $J_{2,2}$ completes at $t=30$, $J_{1,1}$ resumes and completes at $t=40$.
 
 Chunked EDF is used as a simplified prototype implementation, avoiding the additional complexity of full task-context switching during initial evaluation. Synthetic jobs execute in chunks of maximum duration $\Delta$, with job selection repeated after each chunk. An earlier-deadline job released during a chunk may therefore wait until the chunk completes. Sensor jobs use separate staged handlers.
 
-For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_2^2$ is released at $t=20$ ms and preempts $J_1^1$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_2^2$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
+For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_{2,2}$ is released at $t=20$ ms and preempts $J_{1,1}$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_{2,2}$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
 
 \begin{figure*}[!b]
 	\centering
@@ -342,14 +339,14 @@ Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assum
 
 		\If{$\mathcal{R} \neq \emptyset$}
 
-		\State $J_i^j \gets
+		\State $J_{i,j} \gets
 		\Call{SelectEDF}{\mathcal{R}}$
 
-		\State \Call{ExecuteChunk}{$J_i^j,\Delta$}
+		\State \Call{ExecuteChunk}{$J_{i,j},\Delta$}
 
-		\If{\Call{Completed}{$J_i^j$}}
-		\State $f_i^j \gets \Call{Now}{}$
-		\State \Call{CompleteJob}{$J_i^j,f_i^j$}
+		\If{\Call{Completed}{$J_{i,j}$}}
+		\State $f_{i,j} \gets \Call{Now}{}$
+		\State \Call{CompleteJob}{$J_{i,j},f_{i,j}$}
 		\EndIf
 
 		\EndIf
@@ -364,7 +361,7 @@ Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assum
 \subsection{Experimental setup}
 Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled in these experiments. Each synthetic job executes a timed busy-wait workload, the scheduler also uses busy polling. Timing is obtained from the DWT cycle counter, and UART reports are emitted after measurement stops.
 
-The results below use three tasks with $(T_1,T_2,T_3)=(10,50,200)$ ms and $D_i=T_i$. Table~\ref{tab:experimental_workloads} lists the configured execution budgets. Thus, $U$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, Super Loop scans tasks in index order. For clarity, the illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation releases each task for the first time one period after initialization, $R_i^1=t_0+T_i$.
+The results below use three tasks with $(P_1,P_2,P_3)=(10,50,200)$ ms and $D_i=P_i$. Table~\ref{tab:experimental_workloads} lists the configured synthetic workload durations, which are nominal budgets rather than measured worst-case bounds. Thus, $U_{\mathcal{T}}$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, Super Loop scans tasks in index order. For clarity, the illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation releases each task for the first time one period after initialization, $r_{i,1}=t_0+P_i$.
 
 \begin{table}[!htbp]
   \centering
@@ -373,7 +370,7 @@ The results below use three tasks with $(T_1,T_2,T_3)=(10,50,200)$ ms and $D_i=T
   \small
   \begin{tabular}{c|rrr}
     \hline
-    Nominal $U$ (\%) & $C_1$ & $C_2$ & $C_3$ \\
+    Nominal $U_{\mathcal{T}}$ (\%) & $C_1$ & $C_2$ & $C_3$ \\
     \hline
     50 & 1667 & 11111 & 22222 \\
     65 & 2167 & 14444 & 28889 \\
@@ -386,14 +383,14 @@ The results below use three tasks with $(T_1,T_2,T_3)=(10,50,200)$ ms and $D_i=T
   \end{tabular}
 \end{table}
 
-The main comparison uses 60 s windows and $\Delta=1$ ms for EDF. The chunk-size study uses $\Delta\in\{1,2,4\}$ ms at $U\in\{50,90,100\}\%$, the figure below shows $U=90\%$. Each configuration is run three times from reset. Additional campaigns use two tasks and 100 s windows to examine task-set and window-length effects. Extended diagnostic statistics are disabled in all these campaigns.
+The main comparison uses 60 s windows and $\Delta=1$ ms for EDF. The chunk-size study uses $\Delta\in\{1,2,4\}$ ms at $U_{\mathcal{T}}\in\{50,90,100\}\%$, the figure below shows $U_{\mathcal{T}}=90\%$. Each configuration is run three times from reset. Additional campaigns use two tasks and 100 s windows to examine task-set and window-length effects. Extended diagnostic statistics are disabled in all these campaigns.
 
 \subsection{Evaluation metrics}
 Let $N_i$, $M_i$, and $S_i$ be the numbers of completed jobs, completed jobs that missed their deadlines, and skipped releases of $\tau_i$ in a run. Let $W$ be the requested measurement-window duration. We report:
 \begin{itemize}
   \item Deadline-miss ratio: $100M_i/N_i$ percent, defined for $N_i>0$.
-  \item Skipped-release ratio: $100S_i/(W/T_i)$ percent, normalized by the nominal number of releases in the requested window.
-  \item Average response time: the mean of $f_i^j-R_i^j$ over completed jobs. The maximum observed response time is also recorded.
+  \item Skipped-release ratio: $100S_i/(W/P_i)$ percent, normalized by the nominal number of releases in the requested window.
+  \item Average response time: the mean of $f_{i,j}-r_{i,j}$ over completed jobs. The maximum observed response time is also recorded.
   \item Selection overhead: measured time spent selecting jobs in iterations that execute work, divided by the actual measurement duration, in percent. This excludes uninstrumented scheduler work and is not total processor utilization.
 \end{itemize}
 
@@ -402,10 +399,10 @@ Measurement stops at the first loop boundary after $W$, its actual duration may 
 \subsection{Super Loop and EDF comparison}
 Fig.~\ref{fig:scheduler_comparison_tau1} compares the schedulers for $\tau_1$. Under Super Loop, its deadline-miss and skipped-release ratios generally increase with utilization, as does its average response time. With chunked EDF ($\Delta=1$ ms), no deadline misses or skipped releases are recorded for $\tau_1$ in the evaluated three-task configurations. Selecting jobs by absolute deadline reduces the blocking caused by the fixed Super Loop order.
 
-Fig.~\ref{fig:scheduler_comparison_tau3} shows the corresponding results for $\tau_3$. Its average response time under chunked EDF increases with utilization as jobs with earlier absolute deadlines execute first. At nominal $U=100\%$, no capacity is reserved for scheduling and execution overhead, deadline misses and skipped releases are observed for $\tau_3$. The lower response time of $\tau_3$ under Super Loop occurs alongside skipped releases of $\tau_1$, so it does not imply better service for the entire task set.
+Fig.~\ref{fig:scheduler_comparison_tau3} shows the corresponding results for $\tau_3$. Its average response time under chunked EDF increases with utilization as jobs with earlier absolute deadlines execute first. At nominal $U_{\mathcal{T}}=100\%$, no capacity is reserved for scheduling and execution overhead, deadline misses and skipped releases are observed for $\tau_3$. The lower response time of $\tau_3$ under Super Loop occurs alongside skipped releases of $\tau_1$, so it does not imply better service for the entire task set.
 
 \subsection{Effect of chunk duration}
-Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U=90\%$. Larger chunks reduce the frequency of scheduling decisions. In these measurements, the reported selection overhead decreases, while the average response time of $\tau_1$ increases and that of $\tau_3$ decreases. Longer non-preemptive intervals delay $\tau_1$, the result for $\tau_3$ also reflects the changed execution order and fewer scheduling interruptions. The overhead measurements remain preliminary pending validation of the instrumentation.
+Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U_{\mathcal{T}}=90\%$. Larger chunks reduce the frequency of scheduling decisions. In these measurements, the reported selection overhead decreases, while the average response time of $\tau_1$ increases and that of $\tau_3$ decreases. Longer non-preemptive intervals delay $\tau_1$, the result for $\tau_3$ also reflects the changed execution order and fewer scheduling interruptions. The overhead measurements remain preliminary pending validation of the instrumentation.
 
 \begin{figure*}[p]
 \centering
@@ -423,7 +420,7 @@ Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U=90\%$. Larger chunks 
 \centering
 	\includegraphics[width=0.9\textwidth]
 	{chunk_size_tradeoff_u90_n3.pdf}
-	\caption{Impact of chunk duration at $U=90\%$ with three synthetic tasks and 60 s windows.}
+	\caption{Impact of chunk duration at $U_{\mathcal{T}}=90\%$ with three synthetic tasks and 60 s windows.}
 	\label{fig:chunk_size_tradeoff}
 \end{figure*}
 \end{document}
