@@ -40,7 +40,7 @@ The manual switches are grouped in [`app_config.h`](implementation/Core/Inc/app_
 #define EXPERIMENT_MODE EXPERIMENT_INTEGRATED
 ```
 
-Use the [configuration reference](docs/configuration.md) to select a workload, measurement window, scheduler, task count, or profiling mode. It also explains the CSV output and what every macro controls.
+Use the [configuration reference](implementation/docs/configuration.md) to select a workload, measurement window, scheduler, task count, or profiling mode. It also explains the CSV output and what every macro controls.
 
 The [firmware source map](implementation/Core/README.md) shows where the configuration, sensors, scheduling, profiling, and CubeMX-managed code live.
 
@@ -49,7 +49,7 @@ The two scheduling paths differ in an important way:
 - In Superloop, HC-SR04 and DHT11 use blocking baseline transactions.
 - In Chunked EDF, each sensor exposes waiting as a non-runnable state, allowing other ready work to execute. HC-SR04 uses EXTI for ECHO edges, DHT11 has a scheduler-visible 30 ms start-low wait.
 
-The [sensor guide](docs/sensors.md) documents both state machines, wiring-related pin assignments, and short hardware smoke tests.
+The [sensor guide](implementation/docs/sensors.md) documents both state machines, wiring-related pin assignments, and short hardware smoke tests.
 
 The integrated profile measures one window per reset, prints its report through UART, then waits for reset or reflash. Unfinished jobs are reported separately. If the terminal was opened too late, reset the board.
 
@@ -57,33 +57,32 @@ Integrated mode defaults to compact research statistics. `ENABLE_EXTENDED_STATS=
 
 ## Automated experiment series
 
-[`tools/experiment_runner/`](tools/experiment_runner/) can build, flash, capture UART, and aggregate CSV rows for an entire experiment matrix. It preserves the manual switches in `app_config.h`, writes logs, campaign configuration, and CSV tables under `results/<timestamp>/`, and keeps generated results outside Git. `summary.csv` holds run-level measurements, `task_summary.csv` holds per-task measurements.
+[`implementation/tools/experiment_runner/`](implementation/tools/experiment_runner/) can build, flash, capture UART, and aggregate CSV rows for an entire experiment matrix. It preserves the manual switches in `app_config.h`, writes logs, campaign configuration, and CSV tables under `results/<timestamp>/`, and keeps generated results outside Git. `summary.csv` holds run-level measurements, `task_summary.csv` holds per-task measurements.
 
 The campaigns compare schedulers, 60/100 s windows, and EDF chunks of 1/2/4 ms. The automation guide below owns the full matrix inventory and run conditions.
 
 Measurements include completed jobs, deadline misses, skipped releases, mean and maximum observed response time, execution time, and scheduler/polling overhead. The unfinished tracked job is reported with its age, execution so far, and overdue status at cutoff. Response statistics and `MISSES` cover completed jobs. Overhead metrics describe instrumented code regions, not total CPU utilization.
 
-See the [automation guide](tools/experiment_runner/README.md) for setup, matrices, and commands.
+See the [automation guide](implementation/tools/experiment_runner/README.md) for setup, matrices, and commands.
 
 ## Documentation
 
-| Document                                              | Contents                                                                                      |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [Configuration reference](docs/configuration.md)      | Workloads, experiment modes, macros, synthetic tasks, and interpretation of profiling output. |
-| [Sensor guide](docs/sensors.md)                       | HC-SR04 and DHT11 behavior in Superloop and Chunked EDF, pins, and smoke tests.               |
-| [Automation guide](tools/experiment_runner/README.md) | Batch experiment collection on Windows.                                                       |
-| [Project documents](docs/README.md)                   | Maintained Google Slides presentation and Google Colab analysis notebook.                     |
+| Document | Contents |
+| --- | --- |
+| [Configuration reference](implementation/docs/configuration.md) | Workloads, experiment modes, macros, synthetic tasks, and interpretation of profiling output. |
+| [Sensor guide](implementation/docs/sensors.md) | HC-SR04 and DHT11 behavior in Superloop and Chunked EDF, pins, and smoke tests. |
+| [Automation guide](implementation/tools/experiment_runner/README.md) | Batch experiment collection on Windows. |
 
 ## Repository layout
 
-| Path                                                   | Contents                                                                                                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`implementation/`](implementation/)                   | Self-contained STM32CubeIDE implementation, see its [firmware source map](implementation/Core/README.md) for the application-module layout. |
-| [`docs/`](docs/)                                       | Concise technical documentation and links to maintained online materials.                                                                   |
-| [`thesis/`](thesis/)                                   | LaTeX sources for the paper/thesis, figures, and the compiled PDF.                                                                          |
-| [`tools/experiment_runner/`](tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation.                                                                               |
+| Path | Contents |
+| --- | --- |
+| [`implementation/`](implementation/) | Self-contained STM32CubeIDE implementation, see its [firmware source map](implementation/Core/README.md) for the application-module layout. |
+| [`implementation/docs/`](implementation/docs/) | Firmware configuration and sensor guides. |
+| [`thesis/`](thesis/) | LaTeX sources for the paper/thesis, figures, and the compiled PDF. |
+| [`implementation/tools/experiment_runner/`](implementation/tools/experiment_runner/) | Automated build, flashing, UART capture, and CSV aggregation. |
 
-`implementation/Debug/`, `implementation/Release/`, `results/`, Python caches, and local reference/presentation files are generated or personal material and are ignored by Git.
+`implementation/Debug/`, `implementation/Release/`, `results/`, `tmp/`, and Python caches are generated or local material and are ignored by Git.
 
 ## Links
 

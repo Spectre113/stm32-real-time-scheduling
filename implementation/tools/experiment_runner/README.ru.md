@@ -2,18 +2,18 @@
 
 [English version](README.md)
 
-`run_matrix.py` выполняет цикл конфигурация → сборка → прошивка → UART → CSV для каждого запуска. Цель исследования описана в [основном README](../../README.ru.md), параметры прошивки и смысл метрик - в [справочнике](../../docs/configuration.ru.md).
+`run_matrix.py` выполняет цикл конфигурация → сборка → прошивка → UART → CSV для каждого запуска. Цель исследования описана в [основном README](../../../README.ru.md), параметры прошивки и смысл метрик - в [справочнике](../../docs/configuration.ru.md).
 
 ## Подготовка и запуск
 
-Нужны STM32CubeIDE с STM32Cube FW F7, STM32CubeProgrammer и Python 3.10+. Установите зависимость: `py -m pip install -r tools/experiment_runner/requirements.txt`. Закройте терминал, занимающий COM-порт, и CubeIDE, если она использует ту же workspace. Выполняйте команду из корня репозитория, заменив пути на установленные у вас:
+Нужны STM32CubeIDE с STM32Cube FW F7, STM32CubeProgrammer и Python 3.10+. Установите зависимость: `py -m pip install -r implementation/tools/experiment_runner/requirements.txt`. Закройте терминал, занимающий COM-порт, и CubeIDE, если она использует ту же workspace. Выполняйте команду из корня репозитория, заменив пути на установленные у вас:
 
 ```powershell
-py tools\experiment_runner\run_matrix.py `
+py implementation\tools\experiment_runner\run_matrix.py `
   --port COM3 `
   --headless-builder "C:\path\headless-build.bat" `
   --programmer "C:\path\STM32_Programmer_CLI.exe" `
-  --matrix tools\experiment_runner\matrix.integrated_stats.json
+  --matrix implementation\tools\experiment_runner\matrix.integrated_stats.json
 ```
 
 Добавьте `--dry-run` для проверки плана без сборки и обращения к плате. Сборщик подключается под аппаратным сбросом (`mode=UR`, `reset=HWrst`) и делает до трёх попыток при распознаваемых ошибках подключения ST-LINK. Остальные ошибки не маскируются повторными попытками.

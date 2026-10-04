@@ -2,18 +2,18 @@
 
 [Русская версия](README.ru.md)
 
-`run_matrix.py` configures, builds, flashes, captures UART, and saves CSV for each run. See the [root README](../../README.md) for research scope and the [configuration reference](../../docs/configuration.md) for firmware parameters and metric definitions.
+`run_matrix.py` configures, builds, flashes, captures UART, and saves CSV for each run. See the [root README](../../../README.md) for research scope and the [configuration reference](../../docs/configuration.md) for firmware parameters and metric definitions.
 
 ## Setup and execution
 
-Install STM32CubeIDE with STM32Cube FW F7, STM32CubeProgrammer, and Python 3.10+. Install the dependency with `py -m pip install -r tools/experiment_runner/requirements.txt`. Close any terminal using the COM port and CubeIDE if it uses the same workspace. Run from the repository root, replacing the tool paths with your installation paths:
+Install STM32CubeIDE with STM32Cube FW F7, STM32CubeProgrammer, and Python 3.10+. Install the dependency with `py -m pip install -r implementation/tools/experiment_runner/requirements.txt`. Close any terminal using the COM port and CubeIDE if it uses the same workspace. Run from the repository root, replacing the tool paths with your installation paths:
 
 ```powershell
-py tools\experiment_runner\run_matrix.py `
+py implementation\tools\experiment_runner\run_matrix.py `
   --port COM3 `
   --headless-builder "C:\path\headless-build.bat" `
   --programmer "C:\path\STM32_Programmer_CLI.exe" `
-  --matrix tools\experiment_runner\matrix.integrated_stats.json
+  --matrix implementation\tools\experiment_runner\matrix.integrated_stats.json
 ```
 
 Add `--dry-run` to validate the plan without builds or hardware access. Flashing connects under hardware reset (`mode=UR`, `reset=HWrst`) with up to three attempts for recognized ST-LINK connection errors. Other failures are not retried.

@@ -6,9 +6,9 @@
 
 [English version](configuration.md)
 
-Изменяйте [`app_config.h`](../implementation/Core/Inc/app_config.h), затем соберите и прошейте проект. [`experiment_config.h`](../implementation/Core/Inc/experiment_config.h) используется только для временных override автоматического runner и обычно не изменяется.
+Изменяйте [`app_config.h`](../Core/Inc/app_config.h), затем соберите и прошейте проект. [`experiment_config.h`](../Core/Inc/experiment_config.h) используется только для временных override автоматического runner и обычно не изменяется.
 
-[Карта исходного кода прошивки](../implementation/Core/README.ru.md) объясняет назначение модулей и границу безопасного изменения файлов CubeMX.
+[Карта исходного кода прошивки](../Core/README.ru.md) объясняет назначение модулей и границу безопасного изменения файлов CubeMX.
 
 Макросы окон и чанка с окончанием `_US` задаются в микросекундах с суффиксом `ULL`. Для сопоставимых измерений используйте одинаковые сценарий и окно измерения во всех сравниваемых запусках.
 

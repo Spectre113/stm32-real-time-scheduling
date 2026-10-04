@@ -2,7 +2,6 @@
 
 \usepackage{graphicx}
 \usepackage{float}
-\usepackage{easy-todo}
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage[hidelinks]{hyperref}
@@ -15,6 +14,7 @@
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
+\setcounter{dbltopnumber}{2}
 \raggedbottom
 \begin{document}
 
@@ -27,22 +27,14 @@
 }
 \maketitle
 
-
-
-\listoftodos
-
-
 \section{Introduction}
-
 STM32 microcontrollers combine a processor, memory, and peripheral interfaces for embedded applications. The STM32F767 provides interfaces for acquiring sensor data, including analog inputs and a camera interface~\cite{STM32F767Datasheet}. Sensor acquisition and data processing share the processor, making their execution order relevant to timing requirements.
 
 Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
 
 SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation polls tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
 
-
 \subsection{Contribution}
-
 We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic workloads. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
 
 %For this, we implement both schedulers for a real hardware platform, and then conduct the range 
@@ -53,9 +45,7 @@ We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic wo
 %\item we evaluate their performance on a real STM32 hardware.
 %\end{itemize}
 
-
 \section{Background on STM32}
-
 We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which in turn is connected to four sensors:
 %
 \begin{itemize}
@@ -72,8 +62,6 @@ We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw
   \label{fig:stm32_hw}
 \end{figure}
 
-
-
 \section{System Model}
 \label{sec:system_model}
 
@@ -86,10 +74,7 @@ Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Unlike t
   \label{eq:constr_releases}
   r_{i,j+1}=r_{i,j}+P_i.
 \end{equation}
-Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadline $r_{i,j}+D_i$. Its completion time, when executed to completion, is denoted by $f_{i,j}$. Release indices include jobs skipped by the implementation; these have no completion time.
-
-
-
+Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadline $r_{i,j}+D_i$. Its completion time, when executed to completion, is denoted by $f_{i,j}$. Release indices include jobs skipped by the implementation, these have no completion time.
 
 %We assume a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ to be executed on a uniprocessor. Each task is represented by parameters $\tau_i=(C_i, D_i = T_i)$ \todo{AB: Think to use ``$P_i$" instead of ``$T_i$"}, meaning that
 %
@@ -105,7 +90,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
 %t_{i,j+1}^{\mathsf{r}} = t_{i,j}^{\mathsf{r}} + T_i.
 %\end{equation}
 
-\begin{table}[b]
+\begin{table}[H]
   \centering
   \caption{System model notation.}
   \label{tab:system_model}
@@ -141,21 +126,12 @@ Table~\ref{tab:system_model} summarizes the notation introduced above.
 
 The evaluation plots use $U$ as shorthand for $U_{\mathcal{T}}$.
 
-
-
-
-
-
 \section{Schedulers}
 \label{sec:schedulers}
-
 We describe the periodic SuperLoop and chunked EDF schedulers used in our evaluation.
 
-\todo{AB: To keep revising pseudocode for both schedulers.}
-
 \subsection{SuperLoop}
-
-\begin{algorithm}[!t]
+\begin{algorithm}[H]
 	\caption{SuperLoop Scheduler}
 	\label{alg:superloop}
 	\begin{algorithmic}[1]
@@ -189,12 +165,6 @@ We describe the periodic SuperLoop and chunked EDF schedulers used in our evalua
 
 The considered SuperLoop implementation polls tasks in a fixed order and executes each ready job to completion. Algorithm~\ref{alg:superloop} outlines its key steps. To illustrate its behavior, we consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
 
-
-
-
-
-
-
 \begin{table}[H]
   \centering
   \caption{Task set used in the SuperLoop example.}
@@ -214,7 +184,7 @@ The resulting SuperLoop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 \begin{figure*}[tb]
   \centering
   \includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
-  \caption{SuperLoop execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Upward arrows mark releases; the crossed marker denotes a skipped release. Gray hatching indicates waiting; red hatching indicates execution after the deadline.}
+  \caption{SuperLoop schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and the cross marks a skipped release. Gray hatching indicates waiting and red hatching indicates execution after the deadline.}
   \label{fig:superloop_schedule}
 \end{figure*}
 
@@ -274,9 +244,6 @@ The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
 In Fig.~\ref{fig:superloop_schedule}, $J_{1,1}$ executes from $t=0$ to $t=20$. Then, $J_{2,1}$ executes until $t=30$, missing its deadline at $t=20$. At completion, the job released at $r_{2,2}=20$ is counted as skipped and $t_2^{\mathsf{next}}$ advances to $r_{2,3}=40$. Thus, no $J_{2,2}$ is executed.
 
-
-
-
 \subsection{Earliest Deadline First}
 \label{EDF_subsection}
 Unlike SuperLoop, Earliest Deadline First (EDF) selects jobs according
@@ -289,9 +256,7 @@ Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table
 \begin{figure*}[!t]
 	\centering
 	\includegraphics[width=0.9\textwidth]{edf_execution_schedule.png}
-	\caption{EDF execution scenario for the task set in
-		Table~\ref{tab:superloop_tasks}. Upward arrows mark releases. Hatching indicates a released
-		job awaiting execution, including after preemption.}
+	\caption{EDF schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and hatching indicates waiting.}
 	\label{fig:edf_schedule}
 \end{figure*}
 
@@ -301,16 +266,16 @@ Chunked EDF is used as a simplified prototype implementation, avoiding the addit
 
 For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_{2,2}$ is released at $t=20$ ms and preempts $J_{1,1}$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_{2,2}$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
 
-\begin{figure*}[!b]
+\begin{figure*}[t]
 	\centering
-	\includegraphics[width=0.75\textwidth]{chunked_edf_execution_schedule.png}
+	\includegraphics[trim=0 40bp 0 0,clip,width=0.70\textwidth]{chunked_edf_execution_schedule.png}
 	\caption{Chunk-bounded preemption in the EDF implementation.}
 	\label{fig:chunked_edf}
 \end{figure*}
 
 Ignoring scheduling overhead, the delay until the next chunk boundary satisfies $0 \leq \delta \leq \Delta$.
 
-Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assuming first releases at $t=0$. The set $\mathcal{R}$ contains active jobs, meaning jobs admitted for execution but not yet completed, including preempted jobs. Initially, $\mathcal{R}=\emptyset$, $t_i^{\mathsf{next}}=0$, and no job is active. Equal deadlines are resolved by a fixed task order; the three-task experiments use $\tau_2,\tau_1,\tau_3$. \textsc{ExecuteChunk} executes at most $\Delta$ of the selected job's remaining execution and preserves its progress.
+Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assuming first releases at $t=0$. The set $\mathcal{R}$ contains active jobs, meaning jobs admitted for execution but not yet completed, including preempted jobs. Initially, $\mathcal{R}=\emptyset$, so no job is active. Equal deadlines are resolved by a fixed task order, the three-task experiments use $\tau_2,\tau_1,\tau_3$. \textsc{ExecuteChunk} executes at most $\Delta$ of the selected job's remaining execution and preserves its progress.
 
 The auxiliary operations are:
 \begin{itemize}
@@ -324,6 +289,8 @@ The auxiliary operations are:
 	\begin{algorithmic}[1]
 
 		\Function{ChunkedEDF}{$\mathcal{T},\Delta$}
+		\State $t_i^{\mathsf{next}} \gets 0,\quad i=1,\ldots,n$
+		\Comment{Initial releases}
 
 		\While{true}
 
@@ -401,32 +368,38 @@ Let $N_i$, $M_i$, and $S_i$ be the numbers of completed jobs, completed jobs tha
 Measurement stops at the first loop boundary after $W$, its actual duration may therefore be slightly longer. Released but unfinished tracked jobs and their overdue status are recorded separately and excluded from completion-based metrics. Subsequent releases awaiting skip accounting are not included in this pending-job count. Plot points are arithmetic means of the corresponding per-run metrics over three runs, not pooled averages over all jobs.
 
 \subsection{SuperLoop and EDF comparison}
+\begin{figure*}[!t]
+\centering
+	\includegraphics[width=0.84\textwidth]
+	{scheduler_comparison_tau1_n3.pdf}
+	\caption{Performance for $\tau_1$: three synthetic tasks, $\Delta=1$ ms for EDF, 60 s windows.}
+	\label{fig:scheduler_comparison_tau1}
+\end{figure*}
+\begin{figure*}[!t]
+\centering
+	\includegraphics[width=0.84\textwidth]
+	{scheduler_comparison_tau3_n3.pdf}
+	\caption{Performance for $\tau_3$ under the same conditions as Fig.~\ref{fig:scheduler_comparison_tau1}.}
+	\label{fig:scheduler_comparison_tau3}
+\end{figure*}
+
 Fig.~\ref{fig:scheduler_comparison_tau1} compares the schedulers for $\tau_1$. Under SuperLoop, its deadline-miss and skipped-release ratios generally increase with utilization, as does its average response time. With chunked EDF ($\Delta=1$ ms), no deadline misses or skipped releases are recorded for $\tau_1$ in the evaluated three-task configurations. Selecting jobs by absolute deadline reduces the blocking caused by the fixed SuperLoop order.
 
 Fig.~\ref{fig:scheduler_comparison_tau3} shows the corresponding results for $\tau_3$. Its average response time under chunked EDF increases with utilization as jobs with earlier absolute deadlines execute first. At nominal $U_{\mathcal{T}}=100\%$, no capacity is reserved for scheduling and execution overhead, deadline misses and skipped releases are observed for $\tau_3$. The lower response time of $\tau_3$ under SuperLoop occurs alongside skipped releases of $\tau_1$, so it does not imply better service for the entire task set.
 
 \subsection{Effect of chunk duration}
-Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U_{\mathcal{T}}=90\%$. Larger chunks reduce the frequency of scheduling decisions. In these measurements, the reported selection overhead decreases, while the average response time of $\tau_1$ increases and that of $\tau_3$ decreases. Longer non-preemptive intervals delay $\tau_1$, the result for $\tau_3$ also reflects the changed execution order and fewer scheduling interruptions. The overhead measurements remain preliminary pending validation of the instrumentation.
-
-\begin{figure*}[p]
+\begin{figure*}[!t]
 \centering
-	\includegraphics[width=0.9\textwidth]
-	{scheduler_comparison_tau1_n3.pdf}
-	\caption{Performance for $\tau_1$: three synthetic tasks, $\Delta=1$ ms for EDF, 60 s windows.}
-	\label{fig:scheduler_comparison_tau1}
-\medskip
-\centering
-	\includegraphics[width=0.9\textwidth]
-	{scheduler_comparison_tau3_n3.pdf}
-	\caption{Performance for $\tau_3$ under the same conditions as Fig.~\ref{fig:scheduler_comparison_tau1}.}
-	\label{fig:scheduler_comparison_tau3}
-\medskip
-\centering
-	\includegraphics[width=0.9\textwidth]
+	\includegraphics[width=0.84\textwidth]
 	{chunk_size_tradeoff_u90_n3.pdf}
 	\caption{Impact of chunk duration at $U_{\mathcal{T}}=90\%$ with three synthetic tasks and 60 s windows.}
 	\label{fig:chunk_size_tradeoff}
 \end{figure*}
+
+Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U_{\mathcal{T}}=90\%$. Larger chunks reduce the frequency of scheduling decisions. In these measurements, the reported selection overhead decreases, while the average response time of $\tau_1$ increases and that of $\tau_3$ decreases. Longer non-preemptive intervals delay $\tau_1$, the result for $\tau_3$ also reflects the changed execution order and fewer scheduling interruptions. The overhead measurements remain preliminary pending validation of the instrumentation.
+
+\FloatBarrier
 \bibliographystyle{IEEEtran}
+\IEEEtriggeratref{4}
 \bibliography{references}
 \end{document}

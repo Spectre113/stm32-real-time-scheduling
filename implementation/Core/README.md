@@ -36,4 +36,4 @@ generation.
 After a regeneration, rebuild the project and verify that the includes in the
 `USER CODE` section of `main.c` are still present.
 
-Statistics settings and CSV semantics are defined in the [configuration reference](../../docs/configuration.md).
+Statistics settings and CSV semantics are defined in the [configuration reference](../docs/configuration.md).

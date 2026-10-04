@@ -6,9 +6,9 @@ New CSV files use `TAU_TASKS`, `SENSOR_TASKS`, `TAU_U_X10000`. Analysis of old a
 
 [Русская версия](configuration.ru.md)
 
-Edit [`app_config.h`](../implementation/Core/Inc/app_config.h), then rebuild and flash. [`experiment_config.h`](../implementation/Core/Inc/experiment_config.h) is used only for temporary automation-runner overrides and normally remains unchanged.
+Edit [`app_config.h`](../Core/Inc/app_config.h), then rebuild and flash. [`experiment_config.h`](../Core/Inc/experiment_config.h) is used only for temporary automation-runner overrides and normally remains unchanged.
 
-The [firmware source map](../implementation/Core/README.md) explains the role of each source module and the CubeMX-safe editing boundary.
+The [firmware source map](../Core/README.md) explains the role of each source module and the CubeMX-safe editing boundary.
 
 Window and chunk macros ending in `_US` use microseconds and the `ULL` suffix. For comparable measurements, use the same scenario and measurement window in every compared run.
 

@@ -60,7 +60,7 @@ For a DHT11-only run, use the same settings but set `ENABLE_HCSR04` to `0` and `
 
 ## Planned devices
 
-Two devices listed in the [paper](../thesis/main.tex) are planned for future integration:
+Two devices listed in the [paper](../../thesis/main.tex) are planned for future integration:
 
 - **OV2640** - tau3 for image acquisition.
 - **SPW2430** - microphone for acoustic signal acquisition.

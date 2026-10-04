@@ -3,7 +3,7 @@
 
 /*
  * This file is reserved for temporary overrides written by
- * tools/experiment_runner/run_matrix.py.
+ * implementation/tools/experiment_runner/run_matrix.py.
  *
  * For a manual CubeIDE build, edit the documented configuration block at the
  * top of Core/Inc/app_config.h and keep this file unchanged.
