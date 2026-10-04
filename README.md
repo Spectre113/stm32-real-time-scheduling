@@ -2,7 +2,7 @@
 
 [Русская версия](README.ru.md)
 
-STM32CubeIDE experimental platform for comparing Super Loop and chunked EDF on an `STM32F767ZITx`. The study examines how workload utilization, task-set composition, and chunk size affect response time, deadline misses, skipped releases, and scheduler overhead.
+STM32CubeIDE experimental platform for comparing SuperLoop and chunked EDF on an `STM32F767ZITx`. The study examines how workload utilization, task-set composition, and chunk size affect response time, deadline misses, skipped releases, and scheduler overhead.
 
 Two scheduling approaches are implemented:
 

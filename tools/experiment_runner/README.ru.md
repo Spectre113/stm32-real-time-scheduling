@@ -1,4 +1,4 @@
-# Автоматические эксперименты Super Loop и chunked EDF
+# Автоматические эксперименты SuperLoop и chunked EDF
 
 [English version](README.md)
 
@@ -22,9 +22,9 @@ py tools\experiment_runner\run_matrix.py `
 
 | Матрица | Планировщик | Окно, s | Чанк, ms | Запуски |
 | --- | --- | ---: | ---: | ---: |
-| `matrix.integrated_stats.json` | Super Loop | 60 | - | 42 |
+| `matrix.integrated_stats.json` | SuperLoop | 60 | - | 42 |
 | `matrix.integrated_edf.json` | EDF | 60 | 1 | 42 |
-| `matrix.integrated_stats_100s.json` | Super Loop | 100 | - | 18 |
+| `matrix.integrated_stats_100s.json` | SuperLoop | 100 | - | 18 |
 | `matrix.integrated_edf_100s.json` | EDF | 100 | 1 | 18 |
 | `matrix.integrated_edf_chunk2ms.json` | EDF | 60 | 2 | 18 |
 | `matrix.integrated_edf_chunk4ms.json` | EDF | 60 | 4 | 18 |
@@ -40,7 +40,7 @@ py tools\experiment_runner\run_matrix.py `
 - `matrix.default.json`: 84 запуска `clean/checks`, U50/U65/U80/U90/U95/U100, окна 10/30/60/100/250/500/1000 s; 390 минут измерений.
 - `matrix.scalability.json`: 12 запусков `scale_clean/scale_checks`, U65/U90, 2/3/4 задачи, 60 s; 12 минут.
 
-Без `--matrix` скрипт выбирает `matrix.default.json`, а не integrated. Эти отдельные профили выполняют Super Loop независимо от `scheduler_algorithm`; для EDF выбирайте `integrated`. Integrated поддерживает 2/3 задачи. Изменяйте копию подходящей матрицы; поддерживаемые сценарием прошивки значения могут отличаться от допускаемых сборщиком (например, U110 пока отсутствует в runner).
+Без `--matrix` скрипт выбирает `matrix.default.json`, а не integrated. Эти отдельные профили выполняют SuperLoop независимо от `scheduler_algorithm`; для EDF выбирайте `integrated`. Integrated поддерживает 2/3 задачи. Изменяйте копию подходящей матрицы; поддерживаемые сценарием прошивки значения могут отличаться от допускаемых сборщиком (например, U110 пока отсутствует в runner).
 
 ## Результаты и продолжение
 

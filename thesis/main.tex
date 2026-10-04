@@ -34,17 +34,16 @@
 
 \section{Introduction}
 
-\todo{AB: To introduce one paragraph per each point:}
-\begin{enumerate}
-\item STM32 microcontroller;
-\item Tasks from peripheral sensors;
-\item Real-time scheduling: SuperLoop and EDF.
-\end{enumerate}
+STM32 microcontrollers combine a processor, memory, and peripheral interfaces for embedded applications. The STM32F767 provides interfaces for acquiring sensor data, including analog inputs and a camera interface~\cite{STM32F767Datasheet}. Sensor acquisition and data processing share the processor, making their execution order relevant to timing requirements.
+
+Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
+
+SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation checks tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
 
 
 \subsection{Contribution}
 
-We evaluate the scheduling performance of EDF over the default SuperLoop scheduler for STM32 systems. Our implementations for both schedulers are publicly available.
+We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic workloads. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
 
 %For this, we implement both schedulers for a real hardware platform, and then conduct the range 
 %%
@@ -60,10 +59,10 @@ We evaluate the scheduling performance of EDF over the default SuperLoop schedul
 We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which in turn is connected to four sensors:
 %
 \begin{itemize}
-\item DHT11: to measure temperature and humidity;
-\item HC-SR04: to measure distance;
-\item OV2640: to capture images;
-\item SPW2430: to acquire acoustic signal.
+\item DHT11: to measure temperature and humidity~\cite{DHT11Datasheet};
+\item HC-SR04: to measure distance~\cite{HCSR04Datasheet};
+\item OV2640: to capture images~\cite{OV2640Datasheet};
+\item SPW2430: to acquire acoustic signal~\cite{SPW2430Datasheet}.
 \end{itemize}
 
 \begin{figure}[b]
@@ -78,7 +77,7 @@ We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw
 \section{System Model}
 \label{sec:system_model}
 
-We rely on a classical real-time periodic system model by Liu and Layland~\todo{AB: to create a .bib file and add reference}. We adopt the task and release notation of Burmyakov and Bini from \todo{AB: to put reference to Burmyakov2026.}
+We rely on a classical real-time periodic system model by Liu and Layland~\cite{LiuLayland1973}. We adopt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}.
 
 A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on a uniprocessor. Each task $\tau_i=(C_i,D_i,P_i)$ has a worst-case execution time $C_i$, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$. Task utilization is $U_i=\nicefrac{C_i}{P_i}$, and task-set utilization is $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}}U_i$.
 
@@ -140,7 +139,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
 
 Table~\ref{tab:system_model} summarizes the notation introduced above.
 
-In the existing schedule figures, $T_i$, $R_i^j$, and $J_i^j$ denote $P_i$, $r_{i,j}$, and $J_{i,j}$, respectively. The evaluation plots use $U$ as shorthand for $U_{\mathcal{T}}$.
+The evaluation plots use $U$ as shorthand for $U_{\mathcal{T}}$.
 
 
 
@@ -150,7 +149,7 @@ In the existing schedule figures, $T_i$, $R_i^j$, and $J_i^j$ denote $P_i$, $r_{
 \section{Schedulers}
 \label{sec:schedulers}
 
-Below we describe two schedulers, which are considered in our evaluation, that is SuperLoop and EDF.
+We describe the periodic SuperLoop and chunked EDF schedulers used in our evaluation.
 
 \todo{AB: To keep revising pseudocode for both schedulers.}
 
@@ -162,30 +161,23 @@ Below we describe two schedulers, which are considered in our evaluation, that i
 	\begin{algorithmic}[1]
 		\Function{SuperLoop}{$\mathcal{T}$}
 		
-		\ForAll{$\tau_i \in \mathcal{T}$}
-		\State $t_i^{\mathsf{next}} \gets 0$
-		\Comment{Sync. tasks releases at $t=0$}
-		\EndFor
+		\State $t_i^{\mathsf{next}} \gets 0,\quad i=1,\ldots,n$
+		\Comment{Initial releases}
 		
 		\While{true}
-		\Comment{Repeating tasks polling}
 		\For{$i \gets 1$ to $n$}
-		\Comment{Prioritized tasks order}
+		\Comment{Fixed task order}
 		\State $t^{\mathsf{cur}} \gets \Call{Now}{}$
 		
 		\If{$t_i^{\mathsf{next}} \leq t^{\mathsf{cur}}$}
-		\Comment{$\tau_i$ has a ready job}
-		\State $j \gets 1+t_i^{\mathsf{next}}/P_i$
-		\State $r_{i,j} \gets t_i^{\mathsf{next}}$
+		\State $J_{i,j} \gets$ \Call{ReleaseJob}{$\tau_i,t_i^{\mathsf{next}}$}
 		\State \Call{Execute}{$J_{i,j}$}
 		\Comment{Non-preemptive}
 		\State $f_{i,j} \gets \Call{Now}{}$
-		\If{$f_{i,j} > r_{i,j} + D_i$}
-		\State \Call{RecordMiss}{$J_{i,j}$}
-		\EndIf
+		\Comment{Completion time}
 		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
 		\While{$t_i^{\mathsf{next}} < f_{i,j}$}
-		\State \Call{RecordSkip}{$\tau_i, t_i^{\mathsf{next}}$}
+		\Comment{Equality retained}
 		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
 		\EndWhile
 		\EndIf
@@ -195,14 +187,7 @@ Below we describe two schedulers, which are considered in our evaluation, that i
 	\end{algorithmic}
 \end{algorithm}
 
-SuperLoop scheduler is a default choice for STM32 platforms. It complies to the classical fixed-priority scheduling principles, with its key steps outlined in Algorithm~\ref{alg:superloop}:
-%
-\begin{enumerate}
-\item To describe
-\end{enumerate}
-
-
-repeatedly scans tasks in a fixed order and executes each selected job non-preemptively. To illustrate its behavior, let us consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
+The considered SuperLoop implementation repeatedly checks tasks in a fixed order and executes each ready job to completion. Algorithm~\ref{alg:superloop} outlines its key steps. To illustrate its behavior, we consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
 
 
 
@@ -229,13 +214,13 @@ The resulting SuperLoop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 \begin{figure*}[tb]
   \centering
   \includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
-  \caption{SuperLoop execution scenario for the task set in Table~\ref{tab:superloop_tasks}.}
+  \caption{SuperLoop execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Hatching indicates execution after the deadline.}
   \label{fig:superloop_schedule}
 \end{figure*}
 
-Let $t^{cur}$ denote the current system time and $t_i^{next}$ the next release time of task $\tau_i$. During execution of $J_{i,j}$, the release variable $t_i^{next}$ retains $r_{i,j}$. At completion, $f_{i,j}$ denotes the completion time, and a deadline miss is recorded if $f_{i,j}>r_{i,j}+D_i$. The scheduler then advances $t_i^{next}$ by $P_i$. While $t_i^{next}<f_{i,j}$, the job with release time $t_i^{next}$ is counted as skipped and $t_i^{next}$ is advanced by $P_i$ again. A release at $t_i^{next}=f_{i,j}$ is retained.
+Let $t^{\mathsf{cur}}$ denote the current system time and $t_i^{\mathsf{next}}$ the next release time tracked for task $\tau_i$. During execution of $J_{i,j}$, $t_i^{\mathsf{next}}$ retains $r_{i,j}$. At completion, the scheduler advances $t_i^{\mathsf{next}}$ by $P_i$. While $t_i^{\mathsf{next}}<f_{i,j}$, the corresponding release is skipped and $t_i^{\mathsf{next}}$ is advanced by $P_i$ again. A release at $t_i^{\mathsf{next}}=f_{i,j}$ is retained.
 
-Algorithm~\ref{alg:superloop} summarizes the illustrated scheduling logic. Since $r_{i,1}=0$, the release index is $j=1+t_i^{next}/P_i$, including skipped releases. The clock used by \textsc{Now} starts at zero.
+In Algorithm~\ref{alg:superloop}, \textsc{ReleaseJob} creates $J_{i,j}$ with $r_{i,j}=t_i^{\mathsf{next}}$ and $j=1+t_i^{\mathsf{next}}/P_i$, including skipped releases. The clock used by \textsc{Now} starts at zero. Metric collection is omitted from both algorithms.
 
 The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
 
@@ -253,9 +238,9 @@ The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
     >{\centering\arraybackslash}X
     >{\centering\arraybackslash}X}
     \hline
-    $t^{cur}$ &
-    $t_1^{next}$ &
-    $t_2^{next}$ &
+    $t^{\mathsf{cur}}$ &
+    $t_1^{\mathsf{next}}$ &
+    $t_2^{\mathsf{next}}$ &
     Deadline miss check &
     Release skip check \\
     \hline
@@ -287,7 +272,7 @@ The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
   \end{tabularx}
 \end{table}
 
-In Fig.~\ref{fig:superloop_schedule}, $J_{1,1}$ executes from $t=0$ to $t=20$. Then, $J_{2,1}$ executes until $t=30$, missing its deadline at $t=20$. At completion, the job released at $r_{2,2}=20$ is counted as skipped and $t_2^{next}$ advances to $r_{2,3}=40$. Thus, no $J_{2,2}$ is executed.
+In Fig.~\ref{fig:superloop_schedule}, $J_{1,1}$ executes from $t=0$ to $t=20$. Then, $J_{2,1}$ executes until $t=30$, missing its deadline at $t=20$. At completion, the job released at $r_{2,2}=20$ is counted as skipped and $t_2^{\mathsf{next}}$ advances to $r_{2,3}=40$. Thus, no $J_{2,2}$ is executed.
 
 
 
@@ -325,9 +310,13 @@ For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_{2,2}$ i
 
 Ignoring scheduling overhead, the delay until the next chunk boundary satisfies $0 \leq \delta \leq \Delta$.
 
-Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assuming first releases at $t=0$ as in the example. The set $\mathcal{R}$ contains jobs admitted for execution but not yet completed. Initially, $\mathcal{R}=\emptyset$, $t_i^{next}=0$, and no job is active. Equal deadlines are resolved by task order. \textsc{ExecuteChunk} executes at most $\Delta$ of the selected job's remaining execution and preserves its progress.
+Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assuming first releases at $t=0$. The set $\mathcal{R}$ contains active jobs, meaning jobs admitted for execution but not yet completed, including preempted jobs. Initially, $\mathcal{R}=\emptyset$, $t_i^{\mathsf{next}}=0$, and no job is active. Equal deadlines are resolved by a fixed task order; the three-task experiments use $\tau_2,\tau_1,\tau_3$. \textsc{ExecuteChunk} executes at most $\Delta$ of the selected job's remaining execution and preserves its progress.
 
-\textsc{ReleaseJob} creates the job associated with $t_i^{next}$, sets its release and absolute deadline, and adds it to $\mathcal{R}$ as active. \textsc{CompleteJob} checks its deadline and advances $t_i^{next}$ using the skip rule in Algorithm~\ref{alg:superloop}, then removes the job from $\mathcal{R}$ and marks the task inactive.
+The auxiliary operations are:
+\begin{itemize}
+  \item \textsc{ReleaseJob}: creates the job associated with $t_i^{\mathsf{next}}$, sets its release time and absolute deadline, and adds it to $\mathcal{R}$.
+  \item \textsc{CompleteJob}: advances $t_i^{\mathsf{next}}$ using the skip rule in Algorithm~\ref{alg:superloop} and removes the completed job from $\mathcal{R}$.
+\end{itemize}
 
 \begin{algorithm}[!t]
 	\caption{Chunked EDF Scheduler}
@@ -338,24 +327,30 @@ Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assum
 
 		\While{true}
 
-		\State $t^{cur} \gets \Call{Now}{}$
+		\State $t^{\mathsf{cur}} \gets \Call{Now}{}$
 
 		\ForAll{$\tau_i \in \mathcal{T}$}
-		\If{$t_i^{next} \leq t^{cur}$ and $\tau_i$ has no active job}
-		\State \Call{ReleaseJob}{$\tau_i,t_i^{next}$}
+		\Comment{Check releases}
+		\If{$t_i^{\mathsf{next}} \leq t^{\mathsf{cur}}$ and $\tau_i$ has no active job}
+		\State \Call{ReleaseJob}{$\tau_i,t_i^{\mathsf{next}}$}
+		\Comment{Add to $\mathcal{R}$}
 		\EndIf
 		\EndFor
 
 		\If{$\mathcal{R} \neq \emptyset$}
+		\Comment{Pending work}
 
 		\State $J_{i,j} \gets
 		\Call{SelectEDF}{\mathcal{R}}$
+		\Comment{Earliest deadline}
 
 		\State \Call{ExecuteChunk}{$J_{i,j},\Delta$}
+		\Comment{At most $\Delta$}
 
 		\If{\Call{Completed}{$J_{i,j}$}}
 		\State $f_{i,j} \gets \Call{Now}{}$
 		\State \Call{CompleteJob}{$J_{i,j},f_{i,j}$}
+		\Comment{Skip rule}
 		\EndIf
 
 		\EndIf
@@ -432,4 +427,6 @@ Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U_{\mathcal{T}}=90\%$. 
 	\caption{Impact of chunk duration at $U_{\mathcal{T}}=90\%$ with three synthetic tasks and 60 s windows.}
 	\label{fig:chunk_size_tradeoff}
 \end{figure*}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
 \end{document}

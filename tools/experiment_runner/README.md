@@ -1,4 +1,4 @@
-# Automated Super Loop and chunked EDF experiments
+# Automated SuperLoop and chunked EDF experiments
 
 [Русская версия](README.ru.md)
 
@@ -22,9 +22,9 @@ Add `--dry-run` to validate the plan without builds or hardware access. Flashing
 
 | Matrix | Scheduler | Window, s | Chunk, ms | Runs |
 | --- | --- | ---: | ---: | ---: |
-| `matrix.integrated_stats.json` | Super Loop | 60 | - | 42 |
+| `matrix.integrated_stats.json` | SuperLoop | 60 | - | 42 |
 | `matrix.integrated_edf.json` | EDF | 60 | 1 | 42 |
-| `matrix.integrated_stats_100s.json` | Super Loop | 100 | - | 18 |
+| `matrix.integrated_stats_100s.json` | SuperLoop | 100 | - | 18 |
 | `matrix.integrated_edf_100s.json` | EDF | 100 | 1 | 18 |
 | `matrix.integrated_edf_chunk2ms.json` | EDF | 60 | 2 | 18 |
 | `matrix.integrated_edf_chunk4ms.json` | EDF | 60 | 4 | 18 |
@@ -40,7 +40,7 @@ For diagnostics, copy a matrix and set `extended_stats: true`. The runner record
 - `matrix.default.json`: 84 clean/checks runs, U50/U65/U80/U90/U95/U100, windows 10/30/60/100/250/500/1000 s; 390 measurement minutes.
 - `matrix.scalability.json`: 12 scale_clean/scale_checks runs, U65/U90, 2/3/4 tasks, 60 s; 12 minutes.
 
-Omitting `--matrix` selects `matrix.default.json`, not integrated. These separate profiles execute Super Loop regardless of `scheduler_algorithm`; use integrated for EDF. Integrated supports 2/3 tasks. Customize a copy of the relevant matrix. Firmware-supported scenarios may differ from runner-supported scenarios (U110 is not yet accepted by the runner).
+Omitting `--matrix` selects `matrix.default.json`, not integrated. These separate profiles execute SuperLoop regardless of `scheduler_algorithm`; use integrated for EDF. Integrated supports 2/3 tasks. Customize a copy of the relevant matrix. Firmware-supported scenarios may differ from runner-supported scenarios (U110 is not yet accepted by the runner).
 
 ## Results and resume
 

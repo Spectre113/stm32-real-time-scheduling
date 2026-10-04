@@ -1,6 +1,6 @@
 # Configuration reference
 
-Periodic test tasks are `tau1`, `tau2`, `tau3` (periods 10, 50, 200 ms). Their budgets are `TAU1_WORKLOAD_US`, `TAU2_WORKLOAD_US`, `TAU3_WORKLOAD_US`; switches are `ENABLE_TAU1`, `ENABLE_TAU2`, `ENABLE_TAU3`; CSV labels are `TAU1`, `TAU2`, `TAU3`. Physical sensors are separate: `hcsr04_task` / `ENABLE_HCSR04` and `dht11_task` / `ENABLE_DHT11`. Super Loop executes tasks in `tau1 -> tau2 -> tau3` order. EDF selects the earliest absolute deadline; ties retain the original experiments' `tau2 -> tau1 -> tau3` order.
+Periodic test tasks are `tau1`, `tau2`, `tau3` (periods 10, 50, 200 ms). Their budgets are `TAU1_WORKLOAD_US`, `TAU2_WORKLOAD_US`, `TAU3_WORKLOAD_US`; switches are `ENABLE_TAU1`, `ENABLE_TAU2`, `ENABLE_TAU3`; CSV labels are `TAU1`, `TAU2`, `TAU3`. Physical sensors are separate: `hcsr04_task` / `ENABLE_HCSR04` and `dht11_task` / `ENABLE_DHT11`. SuperLoop executes tasks in `tau1 -> tau2 -> tau3` order. EDF selects the earliest absolute deadline; ties retain the original experiments' `tau2 -> tau1 -> tau3` order.
 
 New CSV files use `TAU_TASKS`, `SENSOR_TASKS`, `TAU_U_X10000`. Analysis of old archives requires explicit name conversion; firmware and runner contain no legacy aliases.
 
