@@ -38,7 +38,7 @@ STM32 microcontrollers combine a processor, memory, and peripheral interfaces fo
 
 Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
 
-SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation checks tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
+SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation polls tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
 
 
 \subsection{Contribution}
@@ -187,7 +187,7 @@ We describe the periodic SuperLoop and chunked EDF schedulers used in our evalua
 	\end{algorithmic}
 \end{algorithm}
 
-The considered SuperLoop implementation repeatedly checks tasks in a fixed order and executes each ready job to completion. Algorithm~\ref{alg:superloop} outlines its key steps. To illustrate its behavior, we consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
+The considered SuperLoop implementation polls tasks in a fixed order and executes each ready job to completion. Algorithm~\ref{alg:superloop} outlines its key steps. To illustrate its behavior, we consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
 
 
 
@@ -314,7 +314,7 @@ Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assum
 
 The auxiliary operations are:
 \begin{itemize}
-  \item \textsc{ReleaseJob}: creates the job associated with $t_i^{\mathsf{next}}$, sets its release time and absolute deadline, and adds it to $\mathcal{R}$.
+  \item \textsc{ReleaseJob}: creates and returns the job as in Algorithm~\ref{alg:superloop}, sets its absolute deadline to $r_{i,j}+D_i$, and additionally adds it to $\mathcal{R}$.
   \item \textsc{CompleteJob}: advances $t_i^{\mathsf{next}}$ using the skip rule in Algorithm~\ref{alg:superloop} and removes the completed job from $\mathcal{R}$.
 \end{itemize}
 
@@ -365,7 +365,7 @@ The auxiliary operations are:
 \subsection{Experimental setup}
 Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled in these experiments. Each synthetic job executes a timed busy-wait workload, the scheduler also uses busy polling. Timing is obtained from the DWT cycle counter, and UART reports are emitted after measurement stops.
 
-The results below use three tasks with $(P_1,P_2,P_3)=(10,50,200)$ ms and $D_i=P_i$. Table~\ref{tab:experimental_workloads} lists the configured synthetic workload durations, which are nominal budgets rather than measured worst-case bounds. Thus, $U_{\mathcal{T}}$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, SuperLoop scans tasks in index order. For clarity, the illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation releases each task for the first time one period after initialization, $r_{i,1}=t_0+P_i$.
+The results below use three tasks with $(P_1,P_2,P_3)=(10,50,200)$ ms and $D_i=P_i$. Table~\ref{tab:experimental_workloads} lists the configured synthetic workload durations, which are nominal budgets rather than measured worst-case bounds. Thus, $U_{\mathcal{T}}$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set, SuperLoop polls tasks in index order. For clarity, the illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation releases each task for the first time one period after initialization, $r_{i,1}=t_0+P_i$.
 
 \begin{table}[!htbp]
   \centering
