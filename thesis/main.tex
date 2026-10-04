@@ -214,7 +214,7 @@ The resulting SuperLoop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 \begin{figure*}[tb]
   \centering
   \includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
-  \caption{SuperLoop execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Hatching indicates execution after the deadline.}
+  \caption{SuperLoop execution scenario for the task set in Table~\ref{tab:superloop_tasks}. Upward arrows mark releases; the crossed marker denotes a skipped release. Gray hatching indicates waiting; red hatching indicates execution after the deadline.}
   \label{fig:superloop_schedule}
 \end{figure*}
 
@@ -290,8 +290,8 @@ Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table
 	\centering
 	\includegraphics[width=0.9\textwidth]{edf_execution_schedule.png}
 	\caption{EDF execution scenario for the task set in
-		Table~\ref{tab:superloop_tasks}. Hatching indicates a preempted
-		job awaiting resumption.}
+		Table~\ref{tab:superloop_tasks}. Upward arrows mark releases. Hatching indicates a released
+		job awaiting execution, including after preemption.}
 	\label{fig:edf_schedule}
 \end{figure*}
 
