@@ -11,6 +11,7 @@
 \usepackage{stfloats}
 \usepackage[normalem]{ulem}
 \usepackage{nicefrac}
+\usepackage{easy-todo}
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
@@ -27,12 +28,25 @@
 }
 \maketitle
 
+\listoftodos
+
 \section{Introduction}
-STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
-Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
+\todo{AB: To be revised later.}
 
-SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation polls tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
+STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}. \todo{AB: To describe the types of applications, in which it is typically used.}
+
+Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. %These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
+
+
+To execute sensor tasks on a single STM32 microcontroller, SuperLoop scheduler is commonly used. \todo{AB: To revise the next sentences.} SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation polls tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
+
+\todo{AB: To list below potentially interesting and relevant points to be included later:}
+%
+\begin{itemize}
+\item UART;
+\item Other.
+\end{itemize}
 
 \subsection{Contribution}
 We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic workloads. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
@@ -44,6 +58,7 @@ We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic wo
 %\item then we implement chunked Earliest Deadline First (EDF) scheduler, and finally
 %\item we evaluate their performance on a real STM32 hardware.
 %\end{itemize}
+
 
 \section{Background on STM32}
 We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which in turn is connected to four sensors:
@@ -61,6 +76,12 @@ We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw
   \caption{Our experimental hardware platform.}
   \label{fig:stm32_hw}
 \end{figure}
+
+
+
+
+
+
 
 \section{System Model}
 \label{sec:system_model}
@@ -126,11 +147,20 @@ Table~\ref{tab:system_model} summarizes the notation introduced above.
 
 The evaluation plots use $U$ as shorthand for $U_{\mathcal{T}}$.
 
+
+
+
+
+
+
 \section{Schedulers}
 \label{sec:schedulers}
-We describe the periodic SuperLoop and chunked EDF schedulers used in our evaluation.
+We next provide the technical details on two schedulers, SuperLoop and chunked EDF, which are considered in our evaluation.
 
 \subsection{SuperLoop}
+
+The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:superloop}.
+%
 \begin{algorithm}[H]
 	\caption{SuperLoop Scheduler}
 	\label{alg:superloop}
@@ -163,7 +193,7 @@ We describe the periodic SuperLoop and chunked EDF schedulers used in our evalua
 	\end{algorithmic}
 \end{algorithm}
 
-The considered SuperLoop implementation polls tasks in a fixed order and executes each ready job to completion. Algorithm~\ref{alg:superloop} outlines its key steps. To illustrate its behavior, we consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
+The considered SuperLoop implementation polls tasks in a fixed order and executes each ready job to completion. To illustrate its behavior, we consider the two periodic tasks in Table~\ref{tab:superloop_tasks}. Both tasks first release at $t=0$.
 
 \begin{table}[H]
   \centering
