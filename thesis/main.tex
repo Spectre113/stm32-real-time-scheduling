@@ -181,7 +181,7 @@ The considered SuperLoop implementation polls tasks in a fixed order and execute
 
 The resulting SuperLoop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
 
-\begin{figure*}[tb]
+\begin{figure*}[b]
   \centering
   \includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
   \caption{SuperLoop schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and the cross marks a skipped release. Gray hatching indicates waiting and red hatching indicates execution after the deadline.}
@@ -266,7 +266,7 @@ Chunked EDF is used as a simplified prototype implementation, avoiding the addit
 
 For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_{2,2}$ is released at $t=20$ ms and preempts $J_{1,1}$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_{2,2}$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
 
-\begin{figure*}[t]
+\begin{figure*}[b]
 	\centering
 	\includegraphics[trim=0 40bp 0 0,clip,width=0.70\textwidth]{chunked_edf_execution_schedule.png}
 	\caption{Chunk-bounded preemption in the EDF implementation.}
