@@ -28,7 +28,7 @@
 \maketitle
 
 \section{Introduction}
-STM32 microcontrollers combine a processor, memory, and peripheral interfaces for embedded applications. The STM32F767 provides interfaces for acquiring sensor data, including analog inputs and a camera interface~\cite{STM32F767Datasheet}. Sensor acquisition and data processing share the processor, making their execution order relevant to timing requirements.
+STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
 Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
 
