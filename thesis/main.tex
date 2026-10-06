@@ -34,7 +34,7 @@ STM32 is a family of microcontrollers from STMicroelectronics for embedded appli
 
 STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. Collecting sensor data is only part of the problem: the device must also respond to changes in time.
 
-SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973} are two approaches to organizing this work. Understanding their effects on responsiveness and scheduling cost helps guide the choice for STM32-based applications.
+SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973} are two approaches to scheduling sensor tasks. Understanding their effects on responsiveness and scheduling cost helps guide the choice for STM32-based applications.
 
 \subsection{Contribution}
 We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic workloads. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
@@ -49,7 +49,7 @@ We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic wo
 
 
 \section{Background on STM32}
-Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work, based on an STM32F767 uniprocessor. Table~\ref{tab:sensor_interfaces} summarizes the functions and interfaces of its four sensors. Integration of OV2640 and SPW2430 is planned for future work.
+Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work, based on an STM32F767 uniprocessor. Table~\ref{tab:sensor_interfaces} summarizes the functions and interfaces of its four sensors.
 
 \begin{table}[H]
   \centering
