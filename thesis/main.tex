@@ -28,25 +28,13 @@
 }
 \maketitle
 
-\listoftodos
-
 \section{Introduction}
 
-\todo{AB: To be revised later.}
+STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
-STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}. \todo{AB: To describe the types of applications, in which it is typically used.}
+STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. Collecting sensor data is only part of the problem: the device must also respond to changes in time.
 
-Sensor applications perform recurring tasks, such as reading temperature, measuring distance, capturing images, and acquiring audio. %These tasks may differ in their periods and execution times. A long-running task can delay other tasks, even when their individual workloads are small. Scheduling must therefore account for when jobs become ready and when they must complete.
-
-
-To execute sensor tasks on a single STM32 microcontroller, SuperLoop scheduler is commonly used. \todo{AB: To revise the next sentences.} SuperLoop repeatedly calls software components within a main loop~\cite{KeilSuperLoop}. Our periodic implementation polls tasks in a fixed order and executes each selected job to completion. Earliest Deadline First (EDF) instead selects the ready job with the earliest absolute deadline~\cite{LiuLayland1973}. We implement chunked EDF, which repeats job selection at chunk boundaries. The chunk duration determines how long an earlier-deadline job may wait and how often the scheduler makes a selection.
-
-\todo{AB: To list below potentially interesting and relevant points to be included later:}
-%
-\begin{itemize}
-\item UART;
-\item Other.
-\end{itemize}
+SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973} are two approaches to organizing this work. Understanding their effects on responsiveness and scheduling cost helps guide the choice for STM32-based applications.
 
 \subsection{Contribution}
 We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic workloads. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
@@ -61,19 +49,30 @@ We compare periodic SuperLoop and chunked EDF on an STM32F767 using synthetic wo
 
 
 \section{Background on STM32}
-We illustrate the hardware organization for our system in Fig.~\ref{fig:stm32_hw}. The central processing unit is an STM32F767 uniprocessor, which in turn is connected to four sensors:
-%
-\begin{itemize}
-\item DHT11: to measure temperature and humidity~\cite{DHT11Datasheet};
-\item HC-SR04: to measure distance~\cite{HCSR04Datasheet};
-\item OV2640: to capture images~\cite{OV2640Datasheet};
-\item SPW2430: to acquire acoustic signal~\cite{SPW2430Datasheet}.
-\end{itemize}
+Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work, based on an STM32F767 uniprocessor. Table~\ref{tab:sensor_interfaces} summarizes the functions and interfaces of its four sensors. Integration of OV2640 and SPW2430 is planned for future work.
+
+\begin{table}[H]
+  \centering
+  \caption{Sensor functions and interfaces.}
+  \label{tab:sensor_interfaces}
+  \small
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabularx}{\columnwidth}{@{}l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
+    \hline
+    \textbf{Sensor} & \textbf{Purpose} & \textbf{Interface} \\
+    \hline
+    DHT11~\cite{DHT11Datasheet} & Temperature and humidity & Single-wire digital (GPIO) \\
+    HC-SR04~\cite{HCSR04Datasheet} & Distance & Trigger/echo (GPIO) \\
+    OV2640~\cite{OV2640Datasheet} & Image acquisition & Parallel data; SCCB control \\
+    SPW2430~\cite{SPW2430Datasheet} & Acoustic signal acquisition & Analog output (ADC) \\
+    \hline
+  \end{tabularx}
+\end{table}
 
 \begin{figure}[b]
   \centering
   \includegraphics[width=0.9\columnwidth]{stm32_hardware_platform.png}
-  \caption{Our experimental hardware platform.}
+  \caption{Sensor platform based on STM32F767.}
   \label{fig:stm32_hw}
 \end{figure}
 
@@ -400,14 +399,14 @@ Measurement stops at the first loop boundary after $W$, its actual duration may 
 \subsection{SuperLoop and EDF comparison}
 \begin{figure*}[!t]
 \centering
-	\includegraphics[width=0.84\textwidth]
+	\includegraphics[width=0.80\textwidth]
 	{scheduler_comparison_tau1_n3.pdf}
 	\caption{Performance for $\tau_1$: three synthetic tasks, $\Delta=1$ ms for EDF, 60 s windows.}
 	\label{fig:scheduler_comparison_tau1}
 \end{figure*}
 \begin{figure*}[!t]
 \centering
-	\includegraphics[width=0.84\textwidth]
+	\includegraphics[width=0.80\textwidth]
 	{scheduler_comparison_tau3_n3.pdf}
 	\caption{Performance for $\tau_3$ under the same conditions as Fig.~\ref{fig:scheduler_comparison_tau1}.}
 	\label{fig:scheduler_comparison_tau3}
@@ -420,7 +419,7 @@ Fig.~\ref{fig:scheduler_comparison_tau3} shows the corresponding results for $\t
 \subsection{Effect of chunk duration}
 \begin{figure*}[!t]
 \centering
-	\includegraphics[width=0.84\textwidth]
+	\includegraphics[width=0.80\textwidth]
 	{chunk_size_tradeoff_u90_n3.pdf}
 	\caption{Impact of chunk duration at $U_{\mathcal{T}}=90\%$ with three synthetic tasks and 60 s windows.}
 	\label{fig:chunk_size_tradeoff}
@@ -430,6 +429,6 @@ Fig.~\ref{fig:chunk_size_tradeoff} examines $\Delta$ at $U_{\mathcal{T}}=90\%$. 
 
 \FloatBarrier
 \bibliographystyle{IEEEtran}
-\IEEEtriggeratref{4}
+\IEEEtriggeratref{5}
 \bibliography{references}
 \end{document}
