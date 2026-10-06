@@ -32,9 +32,9 @@
 
 STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
-STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. Collecting sensor data is only part of the problem: the device must also respond to changes in time.
+STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}.
 
-SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973} are two approaches to scheduling sensor tasks. Understanding their effects on responsiveness and scheduling cost helps guide the choice for STM32-based applications.
+SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973} offer two approaches to scheduling sensor tasks. Choosing between them requires understanding how responsiveness and scheduling cost change as the workload increases.
 
 \subsection{Contribution}
 We compare periodic SuperLoop and chunked EDF on an STM32F767. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
