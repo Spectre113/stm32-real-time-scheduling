@@ -63,13 +63,13 @@ Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work,
     \hline
     DHT11~\cite{DHT11Datasheet} & Temperature and humidity & Single-wire digital (GPIO) \\
     HC-SR04~\cite{HCSR04Datasheet} & Distance & Trigger/echo (GPIO) \\
-    OV2640~\cite{OV2640Datasheet} & Image acquisition & Parallel data; SCCB control \\
-    SPW2430~\cite{SPW2430Datasheet} & Acoustic signal acquisition & Analog output (ADC) \\
+    OV2640~\cite{OV2640Datasheet} & Image acquisition & Parallel data, SCCB \\
+    SPW2430~\cite{SPW2430Datasheet} & Signal acquisition & Analog output (ADC) \\
     \hline
   \end{tabularx}
 \end{table}
 
-General-purpose input/output (GPIO) pins carry digital signals, while an analog-to-digital converter (ADC) converts an analog signal into digital values. The Serial Camera Control Bus (SCCB) configures the camera, image data are transferred through the parallel interface.
+General-purpose input/output (GPIO) pins carry digital signals, while an analog-to-digital converter (ADC) converts an analog signal into digital values. The Serial Camera Control Bus (SCCB) configures the camera.
 
 \begin{figure}[b]
   \centering
@@ -196,6 +196,13 @@ The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:supe
 
 The SuperLoop scheduler polls tasks in a fixed order and executes each ready job to completion. Consider the two periodic tasks in Table~\ref{tab:superloop_tasks}, with first releases at $t=0$.
 
+\begin{figure*}[b]
+	\centering
+	\includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
+	\caption{SuperLoop schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and the cross marks a skipped release. Gray hatching indicates waiting and red hatching indicates execution after the deadline.}
+	\label{fig:superloop_schedule}
+\end{figure*}
+
 \begin{table}[H]
   \centering
   \caption{Task set used in the SuperLoop example.}
@@ -211,13 +218,6 @@ The SuperLoop scheduler polls tasks in a fixed order and executes each ready job
 \end{table}
 
 The resulting SuperLoop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
-
-\begin{figure*}[b]
-  \centering
-  \includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
-  \caption{SuperLoop schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and the cross marks a skipped release. Gray hatching indicates waiting and red hatching indicates execution after the deadline.}
-  \label{fig:superloop_schedule}
-\end{figure*}
 
 Let $t^{\mathsf{cur}}$ denote the current system time and $t_i^{\mathsf{next}}$ the next release time tracked for task $\tau_i$. During execution of $J_{i,j}$, $t_i^{\mathsf{next}}$ retains $r_{i,j}$. At completion, the scheduler advances $t_i^{\mathsf{next}}$ by $P_i$. While $t_i^{\mathsf{next}}<f_{i,j}$, the corresponding release is skipped and $t_i^{\mathsf{next}}$ is advanced by $P_i$ again. A release at $t_i^{\mathsf{next}}=f_{i,j}$ is retained.
 
