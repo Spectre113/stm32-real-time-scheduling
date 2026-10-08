@@ -69,6 +69,8 @@ Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work,
   \end{tabularx}
 \end{table}
 
+General-purpose input/output (GPIO) pins carry digital signals, while an analog-to-digital converter (ADC) converts an analog signal into digital values. The Serial Camera Control Bus (SCCB) configures the camera, image data are transferred through the parallel interface.
+
 \begin{figure}[b]
   \centering
   \includegraphics[width=0.9\columnwidth]{stm32_hardware_platform.png}
@@ -356,7 +358,7 @@ The auxiliary operations are:
 
 \section{Performance Evaluation}
 \subsection{Experimental setup}
-Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled in these experiments. Each synthetic job executes a timed busy-wait workload. The scheduler also uses busy polling. Timing is obtained from the DWT cycle counter, and UART reports are emitted after measurement stops.
+Experiments run on the NUCLEO-F767ZI at 96 MHz. Physical sensors are disabled in these experiments. Each synthetic job executes a timed busy-wait workload. The scheduler also uses busy polling. Timing is measured using the processor cycle counter in the Data Watchpoint and Trace (DWT) unit. Reports are transmitted over a serial interface (UART) after measurement stops.
 
 The results below use three tasks with $(P_1,P_2,P_3)=(10,50,200)$ ms and $D_i=P_i$. Table~\ref{tab:experimental_workloads} lists the configured synthetic workload durations, which are nominal budgets rather than measured worst-case bounds. Thus, $U_{\mathcal{T}}$ denotes nominal workload utilization and excludes instrumentation and scheduling overhead. Both schedulers use the same task set. SuperLoop polls tasks in index order. The illustrative schedules assume synchronous first releases at $t=0$, whereas the implementation uses $r_{i,1}=t_0+P_i$, one period after initialization.
 
