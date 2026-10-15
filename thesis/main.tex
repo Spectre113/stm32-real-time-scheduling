@@ -30,11 +30,11 @@
 
 \section{Introduction}
 
-STM32 is a family of microcontrollers from STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
+STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
-STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. A key challenge in these applications is to maintain responsiveness as the workload increases.
+STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness as the workload increases is a key challenge.
 
-The aim of this paper is to assess how the scheduling approach affects responsiveness and processing cost on STM32. We consider two approaches: SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
+The paper examines how the choice of scheduling approach affects responsiveness and processing cost on STM32. We compare two approaches: SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
 
 \subsection{Contribution}
 We compare periodic SuperLoop and chunked EDF on an STM32F767. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
@@ -211,122 +211,8 @@ The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:supe
 	\end{algorithmic}
 \end{algorithm}
 
-The SuperLoop scheduler polls tasks in a fixed order and executes each ready job to completion. Consider the two periodic tasks in Table~\ref{tab:superloop_tasks}, with first releases at $t=0$.
-
-\begin{figure*}[b]
-	\centering
-	\includegraphics[width=0.9\textwidth]{superloop_execution_schedule.png}
-	\caption{SuperLoop schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and the cross marks a skipped release. Gray hatching indicates waiting and red hatching indicates execution after the deadline.}
-	\label{fig:superloop_schedule}
-\end{figure*}
-
-\begin{table}[H]
-  \centering
-  \caption{Task set used in the SuperLoop example.}
-  \label{tab:superloop_tasks}
-  \begin{tabular}{c|ccc}
-    \hline
-    \textbf{Task} & $C_i$ & $P_i$ & $D_i$ \\
-    \hline
-    $\tau_1$ & 20 & 50 & 50 \\
-    $\tau_2$ & 10 & 20 & 20 \\
-    \hline
-  \end{tabular}
-\end{table}
-
-The resulting SuperLoop schedule is shown in Fig.~\ref{fig:superloop_schedule}.
-
-Let $t^{\mathsf{cur}}$ denote the current system time and $t_i^{\mathsf{next}}$ the next release time tracked for task $\tau_i$. During execution of $J_{i,j}$, $t_i^{\mathsf{next}}$ retains $r_{i,j}$. At completion, the scheduler advances $t_i^{\mathsf{next}}$ by $P_i$. While $t_i^{\mathsf{next}}<f_{i,j}$, the corresponding release is skipped and $t_i^{\mathsf{next}}$ is advanced by $P_i$ again. A release at $t_i^{\mathsf{next}}=f_{i,j}$ is retained.
-
-In Algorithm~\ref{alg:superloop}, \textsc{ReleaseJob} creates $J_{i,j}$ with $r_{i,j}=t_i^{\mathsf{next}}$ and $j=1+t_i^{\mathsf{next}}/P_i$, including skipped releases. The clock used by \textsc{Now} starts at zero. Metric collection is omitted from both algorithms.
-
-The corresponding scheduling state is shown in Table~\ref{tab:superloop_state}.
-
-\begin{table}[H]
-  \centering
-  \caption{SuperLoop scheduling state for Fig.~\ref{fig:superloop_schedule}.}
-  \label{tab:superloop_state}
-
-  \small
-  \renewcommand{\arraystretch}{1.2}
-  \setlength{\tabcolsep}{3pt}
-
-  \begin{tabularx}{\columnwidth}{
-    c c c
-    >{\centering\arraybackslash}X
-    >{\centering\arraybackslash}X}
-    \hline
-    $t^{\mathsf{cur}}$ &
-    $t_1^{\mathsf{next}}$ &
-    $t_2^{\mathsf{next}}$ &
-    Deadline miss check &
-    Release skip check \\
-    \hline
-
-    0 & 0 & 0 &
-    -- &
-    -- \\
-
-    20 & 50 & 0 &
-    $20 < r_{1,1} + 50$ &
-    $20 < r_{1,2}$ \\
-
-    30 & 50 & 40 &
-    \textbf{$30 > r_{2,1} + 20$} &
-    \begin{tabular}{c}
-      \textbf{$30 > r_{2,2}$} \\
-      $30 < r_{2,3}$
-    \end{tabular} \\
-
-    40 & 50 & 40 &
-    -- &
-    -- \\
-
-    50 & 50 & 60 &
-    $50 < r_{2,3} + 20$ &
-    $50 < r_{2,4}$ \\
-
-    \hline
-  \end{tabularx}
-\end{table}
-
-In Fig.~\ref{fig:superloop_schedule}, $J_{1,1}$ executes from $t=0$ to $t=20$. Then, $J_{2,1}$ executes until $t=30$, missing its deadline at $t=20$. At completion, the job released at $r_{2,2}=20$ is counted as skipped and $t_2^{\mathsf{next}}$ advances to $r_{2,3}=40$. Thus, no $J_{2,2}$ is executed.
-
 \subsection{Earliest Deadline First}
 \label{EDF_subsection}
-In contrast to the fixed SuperLoop order, Earliest Deadline First (EDF) selects the ready job with the earliest absolute deadline $r_{i,j}+D_i$ (Section~\ref{sec:system_model}). We first consider immediate preemption: if a newly released job has an earlier absolute deadline than the running job, it preempts the running job.
-
-Fig.~\ref{fig:edf_schedule} illustrates EDF scheduling for the task set in Table~\ref{tab:superloop_tasks}.
-
-\begin{figure*}[!t]
-	\centering
-	\includegraphics[width=0.9\textwidth]{edf_execution_schedule.png}
-	\caption{EDF schedule for Table~\ref{tab:superloop_tasks}. Arrows mark releases and hatching indicates waiting.}
-	\label{fig:edf_schedule}
-\end{figure*}
-
-At $t=20$, $J_{2,2}$ is released with $r_{2,2}+D_2=40<r_{1,1}+D_1=50$ and preempts $J_{1,1}$. After $J_{2,2}$ completes at $t=30$, $J_{1,1}$ resumes and completes at $t=40$.
-
-We use chunked EDF as a prototype without full task-context switching. Each synthetic job executes in chunks of maximum duration $\Delta$, and the scheduler selects a job after each chunk. Consequently, an earlier-deadline job released during a chunk may wait until the chunk completes. Sensor jobs use separate staged handlers.
-
-For illustration, Fig.~\ref{fig:chunked_edf} uses $\Delta=4$ ms. Job $J_{2,2}$ is released at $t=20$ ms and preempts $J_{1,1}$ at the next chunk boundary $t=22$ ms. Thus, the preemption delay is $\delta=2$ ms. The final chunk of $J_{2,2}$ lasts $2$ ms, since the preceding two chunks account for $8$ ms of its execution time $C_2=10$ ms.
-
-\begin{figure*}[b]
-	\centering
-	\includegraphics[trim=0 40bp 0 0,clip,width=0.70\textwidth]{chunked_edf_execution_schedule.png}
-	\caption{Chunk-bounded preemption in the EDF implementation.}
-	\label{fig:chunked_edf}
-\end{figure*}
-
-Ignoring scheduling overhead, the delay until the next chunk boundary satisfies $0 \leq \delta \leq \Delta$.
-
-Algorithm~\ref{alg:chunked_edf} summarizes chunked EDF for synthetic jobs, assuming first releases at $t=0$. Let $\mathcal{R}$ denote the set of active jobs: jobs admitted for execution but not yet completed, including preempted jobs. Initially, $\mathcal{R}=\emptyset$. The scheduler resolves equal deadlines by a fixed task order; the three-task experiments use $\tau_2,\tau_1,\tau_3$. \textsc{ExecuteChunk} executes at most $\Delta$ of the selected job's remaining execution and preserves its progress.
-
-The auxiliary operations are:
-\begin{itemize}
-  \item \textsc{ReleaseJob}: creates and returns the job as in Algorithm~\ref{alg:superloop}, sets its absolute deadline to $r_{i,j}+D_i$, and additionally adds it to $\mathcal{R}$.
-  \item \textsc{CompleteJob}: advances $t_i^{\mathsf{next}}$ using the skip rule in Algorithm~\ref{alg:superloop} and removes the completed job from $\mathcal{R}$.
-\end{itemize}
 
 \begin{algorithm}[!t]
 	\caption{Chunked EDF Scheduler}
