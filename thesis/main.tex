@@ -12,6 +12,7 @@
 \usepackage[normalem]{ulem}
 \usepackage{nicefrac}
 \usepackage{easy-todo}
+\usepackage[caption=false,font=footnotesize]{subfig}
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
@@ -113,7 +114,7 @@ Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Unlike t
   \label{eq:constr_releases}
   r_{i,j+1}=r_{i,j}+P_i.
 \end{equation}
-Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadline $r_{i,j}+D_i$. Let $f_{i,j}$ denote its completion time, if it completes. Release indices include jobs skipped by the implementation. These jobs have no completion time.
+Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. Let $f_{i,j}$ denote its completion time, if it completes. Release indices include jobs skipped by the implementation. These jobs have no completion time.
 
 %We assume a set of periodic tasks $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ to be executed on a uniprocessor. Each task is represented by parameters $\tau_i=(C_i, D_i = T_i)$ \todo{AB: Think to use ``$P_i$" instead of ``$T_i$"}, meaning that
 %
@@ -147,7 +148,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
     $J_{i,j}$ & The $j$-th job of task $\tau_i$ \\
     $r_{i,j}$ & Release time of job $J_{i,j}$ \\
     $f_{i,j}$ & Completion time of an executed job \\
-    $r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
+    $d_{i,j}=r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
     $U_i=C_i/P_i$ & Task utilization \\
     $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ & Task-set utilization \\
     \hline
@@ -157,7 +158,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
 \begin{itemize}
   \item A schedule specifies which job executes on the processor at each time instant, or whether the processor executes no job.
   \item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
-  \item A completed job $J_{i,j}$ has missed its deadline if $f_{i,j}>r_{i,j}+D_i$.
+  \item A completed job $J_{i,j}$ has missed its deadline if $f_{i,j}>d_{i,j}$.
   \item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$, the time from its release to completion.
 \end{itemize}
 
@@ -177,7 +178,7 @@ We consider two schedulers: SuperLoop and chunked EDF.
 
 \subsection{SuperLoop}
 
-The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:superloop}.
+The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:superloop}. Fig.~\ref{fig:scheduler_schedules} compares schedules for a common task set.
 %
 \begin{algorithm}[H]
 	\caption{SuperLoop Scheduler}
@@ -210,6 +211,32 @@ The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:supe
 		\EndFunction
 	\end{algorithmic}
 \end{algorithm}
+
+\begin{figure*}[p]
+  \centering
+  \begin{minipage}{0.94\textwidth}
+  \centering
+  \captionsetup[subfloat]{farskip=5pt,captionskip=5pt,nearskip=0pt}
+  {\normalsize
+    $\tau_i=(C_i,D_i,P_i),\qquad D_i=P_i$\par
+    \smallskip
+    $\tau_1=(18,50,50),\qquad \tau_2=(10,20,20)$\par
+    \smallskip
+    All times in ms. Maximum chunk duration in (c): $\Delta=4$ ms.\par
+  }
+  \smallskip
+  \subfloat[\label{fig:superloop_schedule}]{%
+    \includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{superloop_execution_schedule.png}}\par
+  \subfloat[\label{fig:edf_schedule}]{%
+    \includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{edf_execution_schedule.png}}\par
+  \subfloat[\label{fig:chunked_edf}]{%
+    \includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{chunked_edf_execution_schedule.png}}\par
+  \smallskip
+  \includegraphics[width=\linewidth]{scheduler_legend.png}
+  \end{minipage}
+  \caption{Schedules for the same periodic task set under (a) SuperLoop, (b) EDF, and (c) chunked EDF.}
+  \label{fig:scheduler_schedules}
+\end{figure*}
 
 \subsection{Earliest Deadline First}
 \label{EDF_subsection}
