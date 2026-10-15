@@ -138,7 +138,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
   \item A schedule specifies which job executes on the processor at each time instant, or whether the processor executes no job.
   \item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
   \item A completed job $J_{i,j}$ missed its deadline if $f_{i,j}>d_{i,j}$.
-  \item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$
+  \item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$.
 \end{itemize}
 
 
@@ -151,7 +151,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
 \label{sec:schedulers}
 We consider two schedulers: SuperLoop and EDF implementation in which jobs execute in chunks.
 \subsection{SuperLoop}
-SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whether the next release time has been reached. If so, the job runs to completion before the next task is polled. The key steps of the SuperLoop scheduler are outlined in Algorithm 1.
+SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whether the next release time has been reached. If so, the job runs to completion before the next task is polled. The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:superloop}.
 
 %
 \begin{algorithm}[H]
@@ -175,10 +175,8 @@ SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whet
 		\Comment{Non-preemptive}
 		\State $f_{i,j} \gets \textproc{Now}()$
 		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
-		\While{$t_i^{\mathsf{next}} < f_{i,j}$}
-		\Comment{Skip rule}
-		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
-		\EndWhile
+		\State \textbf{while} $t_i^{\mathrm{next}} < f_{i,j}$
+		\textbf{do} $t_i^{\mathrm{next}} \gets t_i^{\mathrm{next}} + P_i$
 		\EndIf
 		\EndFor
 		\EndWhile
@@ -186,7 +184,7 @@ SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whet
 	\end{algorithmic}
 \end{algorithm}
 
-Fig. 2(a) illustrates the SuperLoop schedule for tasks $\tau_1$ and $\tau_2$. Both tasks release their first jobs at $t=0$. Since $\tau_1$ comes first in the polling order, $J_{1,1}$ executes until $t=18$ ms. Job $J_{2,1}$ then starts and completes at $f_{2,1}=28$ ms, missing its deadline $d_{2,1}=20$ ms.
+Fig.~\ref{fig:scheduler_schedules}\subref{fig:superloop_schedule} illustrates the SuperLoop schedule for tasks $\tau_1$ and $\tau_2$. Both tasks release their first jobs at $t=0$. Since $\tau_1$ comes first in the polling order, $J_{1,1}$ executes until $t=18$ ms. Job $J_{2,1}$ then starts and completes at $f_{2,1}=28$ ms, missing its deadline $d_{2,1}=20$ ms.
 
 The release at $r_{2,2}=20$ ms occurs while $J_{2,1}$ is still running. Once this job completes, the scheduler counts that release as skipped and advances the next release time to $r_{2,3}=40$ ms. Polling continues with no ready job until then.
 
@@ -221,13 +219,13 @@ The release at $r_{2,2}=20$ ms occurs while $J_{2,1}$ is still running. Once thi
 
 In contrast, preemptive EDF selects the ready job with the earliest absolute deadline. A newly released job preempts the running job if its deadline is earlier.
 
-Fig. 2(b) shows the EDF schedule for the same task set. At $t=0$, $J_{2,1}$ has the earlier deadline and executes until $t=10$ ms. Job $J_{1,1}$ then starts, but is preempted at $r_{2,2}=20$ ms because the new job has a deadline $d_{2,2}=40$ ms, earlier than $d_{1,1}=50$ ms. Job $J_{2,2}$ executes until $t=30$ ms, after which $J_{1,1}$ resumes and completes at $t=38$ ms. The next job of $\tau_2$ executes from $t=40$ to $t=50$ ms. Thus, no deadline is missed and no release is skipped in this example.
+Fig.~\ref{fig:scheduler_schedules}\subref{fig:edf_schedule} shows the EDF schedule for the same task set. At $t=0$, $J_{2,1}$ has the earlier deadline and executes until $t=10$ ms. Job $J_{1,1}$ then starts, but is preempted at $r_{2,2}=20$ ms because the new job has a deadline $d_{2,2}=40$ ms, earlier than $d_{1,1}=50$ ms. Job $J_{2,2}$ executes until $t=30$ ms, after which $J_{1,1}$ resumes and completes at $t=38$ ms. The next job of $\tau_2$ executes from $t=40$ to $t=50$ ms. Thus, no deadline is missed and no release is skipped in this example.
 
-We use chunked EDF to evaluate scheduling on STM32 before developing a fully preemptive implementation. Jobs run in non-preemptive chunks of at most $\Delta$ time units.
+We use chunked EDF to evaluate scheduling on STM32 before developing a fully preemptive implementation. Jobs run in non-preemptive chunks of at most $\Delta$ ms.
 
 Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. \textsc{CompleteJob} updates the next release time using the skip rule in Algorithm~\ref{alg:superloop}.
 
-Fig. 2(c) shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, the first job of $\tau_1$ is still executing a chunk, which ends at $t=22$ ms. The new job of $\tau_2$ therefore starts at $t=22$ ms, with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. The interrupted job of $\tau_1$ then resumes and completes at $t=38$ ms.
+Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, the first job of $\tau_1$ is still executing a chunk, which ends at $t=22$ ms. The new job of $\tau_2$ therefore starts at $t=22$ ms, with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. The interrupted job of $\tau_1$ then resumes and completes at $t=38$ ms.
 
 \begin{algorithm}[H]
 	\caption{Chunked EDF Scheduler}
@@ -262,12 +260,12 @@ Fig. 2(c) shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, the fi
 		\Comment{Earliest deadline}
 
 		\State \Call{ExecuteChunk}{$J_{i,j},\Delta$}
-		\Comment{At most $\Delta$}
+		\Comment{Duration $\leq\Delta$}
 
 		\If{\Call{Completed}{$J_{i,j}$}}
 		\State $f_{i,j} \gets \textproc{Now}()$
-		\State \Call{CompleteJob}{$J_{i,j},f_{i,j}$}
-		\Comment{Skip rule}
+		\State \textbf{while} $t_i^{\mathrm{next}} < f_{i,j}$
+		\textbf{do} $t_i^{\mathrm{next}} \gets t_i^{\mathrm{next}} + P_i$
 		\State $\mathcal{R} \gets \mathcal{R} \setminus \{J_{i,j}\}$
 		\Comment{Remove completed job}
 		\EndIf
