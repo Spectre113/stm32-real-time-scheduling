@@ -97,16 +97,16 @@ General-purpose input/output (GPIO) pins carry digital signals, while an analog-
 \section{System Model}
 \label{sec:system_model}
 
-We rely on a classical real-time periodic system model by Liu and Layland~\cite{LiuLayland1973}. We adopt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}.
+We use the periodic task model of Liu and Layland~\cite{LiuLayland1973} and adapt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}. Table~\ref{tab:system_model} summarizes the notation.
 
-A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on a uniprocessor. Each task $\tau_i=(C_i,D_i,P_i)$ has a worst-case execution time $C_i$, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$. Task utilization is $U_i=\nicefrac{C_i}{P_i}$, and task-set utilization is $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}}U_i$.
+A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on one core ($m=1$). Each task $\tau_i=(C_i,D_i,P_i)$ is defined by the worst-case execution time $C_i$ of a job, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$. Task utilization is $U_i=\nicefrac{C_i}{P_i}$, and task-set utilization is $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}}U_i$.
 
-Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Unlike the sporadic model in the referenced paper, consecutive releases are separated by exactly $P_i$:
+Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Consecutive jobs are released one period apart:
 \begin{equation}
   \label{eq:constr_releases}
   r_{i,j+1}=r_{i,j}+P_i.
 \end{equation}
-Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. Let $f_{i,j}$ denote its completion time, if it completes. Release indices include jobs skipped by the implementation. These jobs have no completion time.
+Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed, its finish time is denoted by $f_{i,j}$.
 
 \begin{table}[H]
   \centering
@@ -125,7 +125,7 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
     $D_i=P_i$ & Relative deadline, equal to the period \\
     $J_{i,j}$ & The $j$-th job of task $\tau_i$ \\
     $r_{i,j}$ & Release time of job $J_{i,j}$ \\
-    $f_{i,j}$ & Completion time of an executed job \\
+    $f_{i,j}$ & Job completion time \\
     $m$ & Number of cores \\
     $d_{i,j}=r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
     $U_i=C_i/P_i$ & Task utilization \\
@@ -135,9 +135,9 @@ Job $J_{i,j}$ requires at most $C_i$ units of CPU time and has an absolute deadl
 \end{table}
 
 \begin{itemize}
-  \item A schedule specifies which job executes on the processor at each time instant, or whether the processor executes no job.
+  \item A schedule specifies which job executes at each time, if any.
   \item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
-  \item A completed job $J_{i,j}$ missed its deadline if $f_{i,j}>d_{i,j}$.
+  \item A completed job $J_{i,j}$ misses its deadline if $f_{i,j}>d_{i,j}$.
   \item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$.
 \end{itemize}
 
