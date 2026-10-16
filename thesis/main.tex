@@ -222,7 +222,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:edf_schedule} shows the EDF schedu
 
 We use chunked EDF to evaluate scheduling on STM32 before developing a fully preemptive implementation. Jobs run in non-preemptive chunks of at most $\Delta$ ms.
 
-Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. \textsc{CompleteJob} updates the next release time using the skip rule in Algorithm~\ref{alg:superloop}.
+Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. The scheduler maintains a set $\mathcal{R}$ of released but unfinished jobs. After each chunk, it updates $\mathcal{R}$ with newly released jobs and selects the job with the earliest absolute deadline.
 
 Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, the first job of $\tau_1$ is still executing a chunk, which ends at $t=22$ ms. The new job of $\tau_2$ therefore starts at $t=22$ ms, with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. The interrupted job of $\tau_1$ then resumes and completes at $t=38$ ms.
 
