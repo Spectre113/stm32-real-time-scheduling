@@ -29,16 +29,19 @@
 }
 \maketitle
 
+
 \section{Introduction}
+STM32 microcontrollers are used in embedded applications, including environmental~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. As workload increases, the scheduling approach can affect task response time and the ability to meet deadlines.
 
-STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
+Two approaches to task scheduling are SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}. SuperLoop executes tasks in a fixed polling order without preemption, while EDF selects the ready job with the earliest absolute deadline. In chunked EDF, scheduling decisions are made between execution chunks rather than immediately upon each job release.
 
-STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness as the workload increases is a key challenge.
-
-The paper examines how the choice of scheduling approach affects responsiveness and processing cost on STM32. We compare two approaches: SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
+Under SuperLoop, a newly released job may wait until the running job completes. Chunked EDF can switch to another ready job at a chunk boundary. These differences motivate an experimental comparison of responsiveness and scheduling overhead on STM32.
 
 \subsection{Contribution}
-We compare periodic SuperLoop and chunked EDF on an STM32F767. We evaluate the effects of workload utilization and chunk duration on response time, deadline misses, skipped releases, and measured selection overhead. Our implementations for both schedulers are publicly available.
+
+We compare SuperLoop and chunked EDF for periodic tasks with implicit deadlines on an STM32F767 microcontroller. We evaluate the effects of task-set utilization on response time, deadline misses, skipped releases, and measured task-selection overhead. We additionally investigate how maximum chunk duration affects these metrics for chunked EDF. Both scheduler implementations are publicly available.
+
+
 
 
 
@@ -127,6 +130,7 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
     $r_{i,j}$ & Release time of job $J_{i,j}$ \\
     $f_{i,j}$ & Job completion time \\
     $d_{i,j}=r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
+%    $m$ & Number of cores \\
     $U_i=C_i/P_i$ & Task utilization \\
     $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ & Task-set utilization \\
     \hline
@@ -146,11 +150,12 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 
 
+
 \section{Schedulers}
 \label{sec:schedulers}
-We consider two schedulers: SuperLoop and EDF implementation in which jobs execute in chunks.
+We consider two schedulers: SuperLoop and chunked Earliest Deadline First (EDF).
 \subsection{SuperLoop}
-SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whether the next release time has been reached. If so, the job runs to completion before the next task is polled. The key steps of the SuperLoop scheduler are outlined in Algorithm~\ref{alg:superloop}.
+SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whether the next release time has been reached. If so, the job runs to completion before the next task is polled. The key steps are outlined in Algorithm~\ref{alg:superloop}.
 
 %
 \begin{algorithm}[H]
@@ -224,11 +229,14 @@ The release at $r_{2,2}=20$ ms occurs while $J_{2,1}$ is still running. Once thi
 \subsection{Earliest Deadline First}
 \label{EDF_subsection}
 
-In contrast, preemptive EDF selects the ready job with the earliest absolute deadline. A newly released job preempts the running job if its deadline is earlier.
+In contrast, fully preemptive EDF selects the ready job with the earliest absolute deadline. A newly released job preempts the running job if its deadline is earlier.
 
 Fig.~\ref{fig:scheduler_schedules}\subref{fig:edf_schedule} shows the EDF schedule for the same task set. At $t=0$, $J_{2,1}$ has the earlier deadline and executes until $t=10$ ms. Job $J_{1,1}$ then starts, but is preempted at $r_{2,2}=20$ ms because the new job has a deadline $d_{2,2}=40$ ms, earlier than $d_{1,1}=50$ ms. Job $J_{2,2}$ executes until $t=30$ ms, after which $J_{1,1}$ resumes and completes at $t=38$ ms. The next job of $\tau_2$ executes from $t=40$ to $t=50$ ms. Thus, no deadline is missed and no release is skipped in this example.
 
-We use chunked EDF to evaluate scheduling on STM32 before developing a fully preemptive implementation. Jobs run in non-preemptive chunks of at most $\Delta$ ms.
+\subsection{Chunked Earliest Deadline First}
+\label{chunked_EDF_subsection}
+
+Unlike classical EDF, our chunked EDF implementation executes jobs in non-preemptive chunks of at most \(\Delta\) ms.
 
 Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. The scheduler maintains a set $\mathcal{R}$ of released but unfinished jobs. After each chunk, it updates $\mathcal{R}$ with newly released jobs and selects the job with the earliest absolute deadline.
 
@@ -271,6 +279,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 
 		\If{\Call{Completed}{$J_{i,j}$}}
 		\State $f_{i,j} \gets \textproc{Now}()$
+		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
 		\State \textbf{while} $t_i^{\mathrm{next}} < f_{i,j}$
 		\textbf{do} $t_i^{\mathrm{next}} \gets t_i^{\mathrm{next}} + P_i$
 		\State $\mathcal{R} \gets \mathcal{R} \setminus \{J_{i,j}\}$
