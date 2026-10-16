@@ -188,29 +188,37 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:superloop_schedule} illustrates th
 The release at $r_{2,2}=20$ ms occurs while $J_{2,1}$ is still running. Once this job completes, the scheduler counts that release as skipped and advances the next release time to $r_{2,3}=40$ ms. Polling continues with no ready job until then.
 
 \begin{figure*}[p]
-  \centering
-  \begin{minipage}{0.94\textwidth}
-  \centering
-  \captionsetup[subfloat]{farskip=5pt,captionskip=5pt,nearskip=0pt}
-  {\large
-    $\tau_i=(C_i,D_i,P_i),\qquad D_i=P_i, \qquad m = 1$\par
-    \smallskip
-    $\tau_1=(18,50,50),\qquad \tau_2=(10,20,20)$\par
-    \smallskip
-    All times in ms. Maximum chunk duration in (c): $\Delta=4$ ms.\par
-  }
-  \smallskip
-  \subfloat[\label{fig:superloop_schedule}]{%
-    \includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{superloop_execution_schedule.png}}\par
-  \subfloat[\label{fig:edf_schedule}]{%
-    \includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{edf_execution_schedule.png}}\par
-  \subfloat[\label{fig:chunked_edf}]{%
-    \includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{chunked_edf_execution_schedule.png}}\par
-  \smallskip
-  \includegraphics[width=\linewidth]{scheduler_legend.png}
-  \end{minipage}
-  \caption{Schedules for the same periodic task set under (a) SuperLoop, (b) EDF, and (c) chunked EDF.}
-  \label{fig:scheduler_schedules}
+	\centering
+	\begin{minipage}{0.94\textwidth}
+		\centering
+		\captionsetup[subfloat]{farskip=5pt,captionskip=5pt,nearskip=0pt}
+		{\large
+			$\tau_i=(C_i,D_i,P_i),\qquad D_i=P_i, \qquad m = 1$\par
+			\smallskip
+			$\tau_1=(18,50,50),\qquad \tau_2=(10,20,20)$\par
+			\smallskip
+			All times in ms. Maximum chunk duration in (c): $\Delta=4$ ms.\par
+		}
+		\smallskip
+		
+		\subfloat[SuperLoop: missed deadline and skipped job release.
+		\label{fig:superloop_schedule}]{%
+			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{superloop_execution_schedule.png}}\par
+		
+		\subfloat[Preemptive EDF: immediate preemption by a newly released job with an earlier deadline.
+		\label{fig:edf_schedule}]{%
+			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{edf_execution_schedule.png}}\par
+		
+		\subfloat[Chunked EDF: delayed preemption until the current chunk completes.
+		\label{fig:chunked_edf}]{%
+			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{chunked_edf_execution_schedule.png}}\par
+		
+		\smallskip
+		\includegraphics[width=\linewidth]{scheduler_legend.png}
+	\end{minipage}
+	
+	\caption{Comparison of SuperLoop, preemptive EDF, and chunked EDF schedules for the same periodic task set.}
+	\label{fig:scheduler_schedules}
 \end{figure*}
 
 \subsection{Earliest Deadline First}
