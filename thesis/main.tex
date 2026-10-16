@@ -48,7 +48,6 @@ We compare SuperLoop and chunked EDF for periodic tasks with implicit deadlines 
 
 
 \section{Background on STM32}
-
 Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work, based on an STM32F767 uniprocessor. Table~\ref{tab:sensor_interfaces} summarizes the functions and interfaces of its four sensors.
 
 \begin{table}[H]
@@ -71,7 +70,7 @@ Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work,
 
 General-purpose input/output (GPIO) pins carry digital signals, while an analog-to-digital converter (ADC) converts an analog signal into digital values. The Serial Camera Control Bus (SCCB) configures the camera.
 
-\begin{figure}[b]
+\begin{figure}[t]
   \centering
   \includegraphics[width=1\columnwidth]{stm32_hardware_platform.png}
   \caption{Sensor platform based on STM32F767.}
@@ -82,16 +81,34 @@ General-purpose input/output (GPIO) pins carry digital signals, while an analog-
 
 
 \subsection{Programming principles}
+The firmware is written in C using STM32CubeIDE. STM32CubeMX generates peripheral initialization code, while the hardware abstraction layer (HAL) provides access to the peripherals. Application code is placed in \texttt{USER CODE} regions. Fig.~\ref{fig:programming_principles} shows an initialization example. 
 
-\todo{AB: To describe the key aspects of STM32 programming. Limit the text to one page.}
+Macros in \texttt{app\_config.h} configure the scheduler, chunk size, and enabled tasks. The example of such macros are provided in Table~\ref{tab:firmware_settings}. Synthetic tasks generate a controlled processor workload without accessing sensors, allowing scheduling behavior to be evaluated under different loads.
 
-\begin{enumerate}
-\item Programming environment: software name, protocols, etc.
-\item Template structure of the project (macroses) in the development environment;
-\item Functionality (macroses) to be implemented in that structure;
-\item Put some print screens.
-\end{enumerate}
+\begin{figure}[b]
+  \centering
+  \includegraphics[width=\columnwidth]{programming-init.png}
+  \caption{Peripheral initialization and a user-code region in STM32CubeIDE.}
+  \label{fig:programming_principles}
+\end{figure}
 
+\begin{table}[H]
+  \centering
+  \caption{Main firmware settings.}
+  \label{tab:firmware_settings}
+  \small
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabularx}{\columnwidth}{@{}l >{\raggedright\arraybackslash}X@{}}
+    \hline
+    \textbf{Macro} & \textbf{Purpose} \\
+    \hline
+    \texttt{SCHED\_ALGO} & Select SuperLoop or chunked EDF \\
+    \texttt{EDF\_CHUNK\_US} & Set the maximum chunk size in microseconds \\
+    \texttt{ENABLE\_SYNTHETIC} & Enable synthetic tasks \\
+    \texttt{ENABLE\_REAL\_SENSORS} & Enable physical-sensor tasks \\
+    \hline
+  \end{tabularx}
+\end{table}
 
 
 
@@ -102,7 +119,33 @@ General-purpose input/output (GPIO) pins carry digital signals, while an analog-
 
 We use the periodic task model of Liu and Layland~\cite{LiuLayland1973} and adapt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}. Table~\ref{tab:system_model} summarizes the notation.
 
-A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on one core ($m=1$). Each task $\tau_i=(C_i,D_i,P_i)$ is defined by the worst-case execution time $C_i$ of a job, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$. Task utilization is $U_i=\nicefrac{C_i}{P_i}$, and task-set utilization is $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}}U_i$.
+\begin{table}[H]
+	\centering
+	\caption{System model notation.}
+	\label{tab:system_model}
+	\small
+	\renewcommand{\arraystretch}{1.15}
+	\begin{tabularx}{\columnwidth}{l >{\raggedright\arraybackslash}X}
+		\hline
+		\textbf{Symbol} & \textbf{Meaning} \\
+		\hline
+		$\mathcal{T}, n$ & Task set and number of tasks \\
+		$\tau_i$ & Task $i$ \\
+		$C_i$ & Worst-case execution time of a job of $\tau_i$ \\
+		$P_i$ & Task period \\
+		$D_i=P_i$ & Relative deadline, equal to the period \\
+		$J_{i,j}$ & The $j$-th job of task $\tau_i$ \\
+		$r_{i,j}$ & Release time of job $J_{i,j}$ \\
+		$f_{i,j}$ & Job completion time \\
+		$d_{i,j}=r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
+		$m$ & Number of cores \\
+		$U_i=C_i/P_i$ & Task utilization \\
+		$U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ & Task-set utilization \\
+		\hline
+	\end{tabularx}
+\end{table}
+
+A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on one core ($m=1$). Each task $\tau_i=(C_i,D_i,P_i)$ is defined by the worst-case execution time $C_i$ of a job, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$.
 
 Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Consecutive jobs are released one period apart:
 \begin{equation}
@@ -111,37 +154,11 @@ Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Consecut
 \end{equation}
 Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed, its finish time is denoted by $f_{i,j}$.
 
-\begin{table}[H]
-  \centering
-  \caption{System model notation.}
-  \label{tab:system_model}
-  \small
-  \renewcommand{\arraystretch}{1.15}
-  \begin{tabularx}{\columnwidth}{l >{\raggedright\arraybackslash}X}
-    \hline
-    \textbf{Symbol} & \textbf{Meaning} \\
-    \hline
-    $\mathcal{T}, n$ & Task set and number of tasks \\
-    $\tau_i$ & Task $i$ \\
-    $C_i$ & Worst-case execution time of a job of $\tau_i$ \\
-    $P_i$ & Task period \\
-    $D_i=P_i$ & Relative deadline, equal to the period \\
-    $J_{i,j}$ & The $j$-th job of task $\tau_i$ \\
-    $r_{i,j}$ & Release time of job $J_{i,j}$ \\
-    $f_{i,j}$ & Job completion time \\
-    $d_{i,j}=r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
-    $m$ & Number of cores \\
-    $U_i=C_i/P_i$ & Task utilization \\
-    $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ & Task-set utilization \\
-    \hline
-  \end{tabularx}
-\end{table}
-
 \begin{itemize}
-  \item A schedule specifies which job executes at each time, if any.
-  \item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
-  \item A completed job $J_{i,j}$ misses its deadline if $f_{i,j}>d_{i,j}$.
-  \item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$.
+	\item A schedule specifies which job executes at each time, if any.
+	\item Preemption interrupts a job before completion to execute another job. The interrupted job may resume later.
+	\item A completed job $J_{i,j}$ misses its deadline if $f_{i,j}>d_{i,j}$.
+	\item The response time of a completed job $J_{i,j}$ is $f_{i,j}-r_{i,j}$.
 \end{itemize}
 
 
@@ -192,40 +209,6 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:superloop_schedule} illustrates th
 
 The release at $r_{2,2}=20$ ms occurs while $J_{2,1}$ is still running. Once this job completes, the scheduler counts that release as skipped and advances the next release time to $r_{2,3}=40$ ms. Polling continues with no ready job until then.
 
-\begin{figure*}[p]
-	\centering
-	\begin{minipage}{0.94\textwidth}
-		\centering
-		\captionsetup[subfloat]{farskip=5pt,captionskip=5pt,nearskip=0pt}
-		{\large
-			$\tau_i=(C_i,D_i,P_i),\qquad D_i=P_i, \qquad m = 1$\par
-			\smallskip
-			$\tau_1=(18,50,50),\qquad \tau_2=(10,20,20)$\par
-			\smallskip
-			All times in ms. Maximum chunk duration in (c): $\Delta=4$ ms.\par
-		}
-		\smallskip
-		
-		\subfloat[SuperLoop: missed deadline and skipped job release.
-		\label{fig:superloop_schedule}]{%
-			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{superloop_execution_schedule.png}}\par
-		
-		\subfloat[Preemptive EDF: immediate preemption by a newly released job with an earlier deadline.
-		\label{fig:edf_schedule}]{%
-			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{edf_execution_schedule.png}}\par
-		
-		\subfloat[Chunked EDF: delayed preemption until the current chunk completes.
-		\label{fig:chunked_edf}]{%
-			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{chunked_edf_execution_schedule.png}}\par
-		
-		\smallskip
-		\includegraphics[width=\linewidth]{scheduler_legend.png}
-	\end{minipage}
-	
-	\caption{Comparison of SuperLoop, preemptive EDF, and chunked EDF schedules for the same periodic task set.}
-	\label{fig:scheduler_schedules}
-\end{figure*}
-
 \subsection{Earliest Deadline First}
 \label{EDF_subsection}
 
@@ -236,7 +219,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:edf_schedule} shows the EDF schedu
 \subsection{Chunked Earliest Deadline First}
 \label{chunked_EDF_subsection}
 
-Unlike classical EDF, our chunked EDF implementation executes jobs in non-preemptive chunks of at most \(\Delta\) ms.
+Unlike classical EDF, our chunked EDF implementation executes jobs in non-preemptive chunks of at most \(\Delta\) ms. Sensor operations are split only at points that preserve the timing requirements of the interface.
 
 Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. The scheduler maintains a set $\mathcal{R}$ of released but unfinished jobs. After each chunk, it updates $\mathcal{R}$ with newly released jobs and selects the job with the earliest absolute deadline.
 
@@ -293,6 +276,40 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 		\EndFunction
 	\end{algorithmic}
 \end{algorithm}
+
+\begin{figure*}[p]
+	\centering
+	\begin{minipage}{0.94\textwidth}
+		\centering
+		\captionsetup[subfloat]{farskip=5pt,captionskip=5pt,nearskip=0pt}
+		{\large
+			$\tau_i=(C_i,D_i,P_i),\qquad D_i=P_i, \qquad m = 1$\par
+			\smallskip
+			$\tau_1=(18,50,50),\qquad \tau_2=(10,20,20)$\par
+			\smallskip
+			All times in ms. Maximum chunk duration in (c): $\Delta=4$ ms.\par
+		}
+		\smallskip
+		
+		\subfloat[SuperLoop: missed deadline and skipped job release.
+		\label{fig:superloop_schedule}]{%
+			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{superloop_execution_schedule.png}}\par
+		
+		\subfloat[Preemptive EDF: immediate preemption by a newly released job with an earlier deadline.
+		\label{fig:edf_schedule}]{%
+			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{edf_execution_schedule.png}}\par
+		
+		\subfloat[Chunked EDF: delayed preemption until the current chunk completes.
+		\label{fig:chunked_edf}]{%
+			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{chunked_edf_execution_schedule.png}}\par
+		
+		\smallskip
+		\includegraphics[width=\linewidth]{scheduler_legend.png}
+	\end{minipage}
+	
+	\caption{Comparison of SuperLoop, preemptive EDF, and chunked EDF schedules for the same periodic task set.}
+	\label{fig:scheduler_schedules}
+\end{figure*}
 
 \FloatBarrier
 \bibliographystyle{IEEEtran}
