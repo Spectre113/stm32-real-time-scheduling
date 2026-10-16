@@ -130,7 +130,7 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
     $r_{i,j}$ & Release time of job $J_{i,j}$ \\
     $f_{i,j}$ & Job completion time \\
     $d_{i,j}=r_{i,j}+D_i$ & Absolute deadline of job $J_{i,j}$ \\
-%    $m$ & Number of cores \\
+    $m$ & Number of cores \\
     $U_i=C_i/P_i$ & Task utilization \\
     $U_{\mathcal{T}}=\sum_{\tau_i\in\mathcal{T}} U_i$ & Task-set utilization \\
     \hline
@@ -153,7 +153,7 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 \section{Schedulers}
 \label{sec:schedulers}
-We consider two schedulers: SuperLoop and chunked Earliest Deadline First (EDF).
+We consider two schedulers: SuperLoop and chunked Earliest Deadline First (EDF). For illustration, we also show a fully preemptive EDF scheduler.
 \subsection{SuperLoop}
 SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whether the next release time has been reached. If so, the job runs to completion before the next task is polled. The key steps are outlined in Algorithm~\ref{alg:superloop}.
 
@@ -279,7 +279,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 
 		\If{\Call{Completed}{$J_{i,j}$}}
 		\State $f_{i,j} \gets \textproc{Now}()$
-		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
+%		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
 		\State \textbf{while} $t_i^{\mathrm{next}} < f_{i,j}$
 		\textbf{do} $t_i^{\mathrm{next}} \gets t_i^{\mathrm{next}} + P_i$
 		\State $\mathcal{R} \gets \mathcal{R} \setminus \{J_{i,j}\}$
