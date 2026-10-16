@@ -119,6 +119,15 @@ Macros in \texttt{app\_config.h} configure the scheduler, chunk size, and enable
 
 We use the periodic task model of Liu and Layland~\cite{LiuLayland1973} and adapt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}. Table~\ref{tab:system_model} summarizes the notation.
 
+A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on one core ($m=1$). Each task $\tau_i=(C_i,D_i,P_i)$ is defined by the worst-case execution time $C_i$ of a job, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$.
+
+Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Consecutive jobs are released one period apart:
+\begin{equation}
+  \label{eq:constr_releases}
+  r_{i,j+1}=r_{i,j}+P_i.
+\end{equation}
+Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed, its finish time is denoted by $f_{i,j}$.
+
 \begin{table}[H]
 	\centering
 	\caption{System model notation.}
@@ -144,15 +153,6 @@ We use the periodic task model of Liu and Layland~\cite{LiuLayland1973} and adap
 		\hline
 	\end{tabularx}
 \end{table}
-
-A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on one core ($m=1$). Each task $\tau_i=(C_i,D_i,P_i)$ is defined by the worst-case execution time $C_i$ of a job, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$.
-
-Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Consecutive jobs are released one period apart:
-\begin{equation}
-  \label{eq:constr_releases}
-  r_{i,j+1}=r_{i,j}+P_i.
-\end{equation}
-Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed, its finish time is denoted by $f_{i,j}$.
 
 \begin{itemize}
 	\item A schedule specifies which job executes at each time, if any.
