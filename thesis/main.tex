@@ -33,6 +33,7 @@
 
 \todo{AB: To rewrite introduction according to literature review}
 \section{Introduction}
+
 STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
 STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness as the workload increases is a key challenge.
@@ -52,12 +53,24 @@ The paper examines how the choice of scheduling approach affects responsiveness 
 First, we compare SuperLoop and chunked EDF for periodic tasks with implicit deadlines on an STM32F767 microcontroller. Then, we evaluate the effects of task-set utilization on response time, deadline misses, skipped releases, and measured task-selection overhead. Also, we investigate how maximum chunk duration affects these metrics for chunked EDF. Both scheduler implementations are publicly available.
 
 
+\subsection{Paper organization}
+
+\todo{AB: To update the description below.}
+
+First, in Section~\ref{sec:STM32_background} we provide the necessary background for STM32 hardware systems. Starting with the hardware components description in Section~\ref{sec:hw_components}, we describe the key programming principles for them in Section~\ref{sec:programming_principles}, etc.
+
+
 
 
 
 
 
 \section{Background on STM32}
+\label{sec:STM32_background}
+
+\subsection{Hardware components}
+\label{sec:hw_components}
+
 Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work, based on an STM32F767. Table~\ref{tab:sensor_interfaces} summarizes the functions and interfaces of its four sensors.
 
 \begin{table}[H]
@@ -92,6 +105,22 @@ General-purpose input/output (GPIO) pins carry digital signals, while an analog-
 
 
 \subsection{Programming principles}
+\label{sec:programming_principles}
+
+\todo{AB: Questions to be answered}
+%
+\begin{enumerate}
+\item Which software environment(s) do we use? STM32CubeIDE, MX
+\item Which programming languages? C
+\item What are the key components of our STM32 software project? To describe the default project structure, that is folders, key files, etc.
+\item $\mathsf{SuperLoop}$ (or ``bare-metal") programming pattern;
+\item Other.
+\end{enumerate}
+
+
+
+
+
 The firmware is written in C using STM32CubeIDE. STM32CubeMX generates peripheral initialization code, while the hardware abstraction layer (HAL) provides access to the peripherals. Application code is placed in \texttt{USER CODE} regions. Fig.~\ref{fig:programming_principles} shows an initialization example. 
 
 Macros in \texttt{app\_config.h} configure the scheduler, chunk size, and enabled tasks. Table~\ref{tab:firmware_settings} summarizes the main firmware configuration macros. Synthetic tasks generate a controlled processor workload without accessing sensors, allowing scheduling behavior to be evaluated under different loads.
