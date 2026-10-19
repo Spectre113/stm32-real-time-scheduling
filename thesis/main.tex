@@ -13,6 +13,23 @@
 \usepackage{nicefrac}
 \usepackage{easy-todo}
 \usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage{dirtree}
+\usepackage{listings}
+
+\lstdefinestyle{ieeec}{
+	language=C,
+	basicstyle=\ttfamily\footnotesize,
+	keywordstyle=\bfseries,
+	commentstyle=\itshape,
+	numbers=none,
+	frame=none,
+	breaklines=true,
+	columns=fullflexible,
+	keepspaces=true,
+	showstringspaces=false,
+	tabsize=2
+}
+
 
 \algrenewcommand\algorithmiccomment[1]{\hfill$\triangleright$ #1}
 
@@ -30,8 +47,6 @@
 \maketitle
 %\listoftodos
 
-
-\todo{AB: To rewrite introduction according to literature review}
 \section{Introduction}
 
 STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
@@ -41,7 +56,6 @@ STM32-based devices support applications such as environmental monitoring~\cite{
 The paper examines how the choice of scheduling approach affects responsiveness and processing cost on STM32. We compare two approaches: SuperLoop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
 
 \subsection{Related works}
-\todo{AB: To add literature review}
 \begin{itemize}
 	\item SuperLoop in RTS.
 	\item EDF and chunked EDF.
@@ -55,8 +69,6 @@ First, we compare SuperLoop and chunked EDF for periodic tasks with implicit dea
 
 \subsection{Paper organization}
 
-\todo{AB: To update the description below.}
-
 First, in Section~\ref{sec:STM32_background} we provide the necessary background for STM32 hardware systems. Starting with the hardware components description in Section~\ref{sec:hw_components}, we describe the key programming principles for them in Section~\ref{sec:programming_principles}, etc.
 
 
@@ -68,87 +80,176 @@ First, in Section~\ref{sec:STM32_background} we provide the necessary background
 \section{Background on STM32}
 \label{sec:STM32_background}
 
-\subsection{Hardware components}
-\label{sec:hw_components}
+\subsection{Hardware platform}
 
-Fig.~\ref{fig:stm32_hw} illustrates the sensor platform considered in this work, based on an STM32F767. Table~\ref{tab:sensor_interfaces} summarizes the functions and interfaces of its four sensors.
+We use an STM32F767 microcontroller with four sensors in our experiments (Fig.~\ref{fig:stm32_hw}). The sensors collect different types of data and use different interfaces, as shown in Table~\ref{tab:sensor_interfaces}. The code that reads and processes their data forms the sensor-based workload for our scheduling experiments.
+
 
 \begin{table}[H]
-  \centering
-  \caption{Sensor functions and interfaces.}
-  \label{tab:sensor_interfaces}
-  \small
-  \renewcommand{\arraystretch}{1.15}
-  \begin{tabularx}{\columnwidth}{@{}l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
-    \hline
-    \textbf{Sensor} & \textbf{Purpose} & \textbf{Interface} \\
-    \hline
-    DHT11~\cite{DHT11Datasheet} & Temperature and humidity & Single-wire digital (GPIO) \\
-    HC-SR04~\cite{HCSR04Datasheet} & Distance & Trigger/echo (GPIO) \\
-    OV2640~\cite{OV2640Datasheet} & Image acquisition & Parallel data, SCCB \\
-    SPW2430~\cite{SPW2430Datasheet} & Signal acquisition & Analog output (ADC) \\
-    \hline
-  \end{tabularx}
+	\centering
+	\caption{Sensor functions and interfaces.}
+	\label{tab:sensor_interfaces}
+	\small
+	\renewcommand{\arraystretch}{1.15}
+	\begin{tabularx}{\columnwidth}{@{}l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
+		\hline
+		\textbf{Sensor} & \textbf{Purpose} & \textbf{Interface} \\
+		\hline
+		DHT11~\cite{DHT11Datasheet} & Temperature and humidity & Single-wire digital, GPIO \\
+		HC-SR04~\cite{HCSR04Datasheet} & Distance & Trigger/echo, GPIO \\
+		OV2640~\cite{OV2640Datasheet} & Image acquisition & Parallel data, SCCB \\
+		SPW2430~\cite{SPW2430Datasheet} & Signal acquisition & Analog output, ADC \\
+		\hline
+	\end{tabularx}
+	
+	\vspace{2pt}
+	\parbox{\columnwidth}{%
+		\footnotesize
+		GPIO - General-Purpose Input/Output;
+		SCCB - Serial Camera Control Bus;
+		ADC - Analog-to-Digital Converter.
+	}
 \end{table}
 
-General-purpose input/output (GPIO) pins carry digital signals, while an analog-to-digital converter (ADC) converts an analog signal into digital values. The Serial Camera Control Bus (SCCB) configures the camera.
 
-\todo{AB: To think about sensor platform figure}
 \begin{figure}[t]
-  \centering
-  \includegraphics[width=1\columnwidth]{stm32_hardware_platform.png}
-  \caption{Sensor platform based on STM32F767.}
-  \label{fig:stm32_hw}
+	\centering
+	\includegraphics[width=1\columnwidth]{stm32_hardware_platform.png}
+	\caption{Sensor platform based on STM32F767.}
+	\label{fig:stm32_hw}
 \end{figure}
 
 
 
+\subsection{STM32 project structure}
 
-\subsection{Programming principles}
-\label{sec:programming_principles}
+We use STM32CubeMX to configure the microcontroller pins and peripherals and generate a C project for STM32CubeIDE. Fig.~\ref{fig:stm32_project_structure} shows the main parts of the generated project. The Core directory contains the application code, while Startup and Drivers provide the code needed to start and work with the microcontroller. We add our sensor and computation functions to the project without changing the generated system files.
 
-\todo{AB: Questions to be answered}
-%
-\begin{enumerate}
-\item Which software environment(s) do we use? STM32CubeIDE, MX
-\item Which programming languages? C
-\item What are the key components of our STM32 software project? To describe the default project structure, that is folders, key files, etc.
-\item $\mathsf{SuperLoop}$ (or ``bare-metal") programming pattern;
-\item Other.
-\end{enumerate}
-
-
-
-
-
-The firmware is written in C using STM32CubeIDE. STM32CubeMX generates peripheral initialization code, while the hardware abstraction layer (HAL) provides access to the peripherals. Application code is placed in \texttt{USER CODE} regions. Fig.~\ref{fig:programming_principles} shows an initialization example. 
-
-Macros in \texttt{app\_config.h} configure the scheduler, chunk size, and enabled tasks. Table~\ref{tab:firmware_settings} summarizes the main firmware configuration macros. Synthetic tasks generate a controlled processor workload without accessing sensors, allowing scheduling behavior to be evaluated under different loads.
-
-\begin{figure}[b]
-  \centering
-  \includegraphics[width=\columnwidth]{programming-init.png}
-  \caption{Peripheral initialization and a user-code region in STM32CubeIDE.}
-  \label{fig:programming_principles}
+\begin{figure}[t]
+	\centering
+	\begin{minipage}{\columnwidth}
+		\footnotesize
+		\renewcommand*\DTstyle{\ttfamily}
+		\renewcommand*\DTstylecomment{\rmfamily\itshape}
+		\DTsetlength{0.2em}{0.8em}{0.2em}{0.35pt}{1.2pt}
+		
+		\dirtree{%
+			.1 test\_project/.
+			.2 Core/\DTcomment{Application code}.
+			.3 Inc/\DTcomment{Header files}.
+			.3 Src/\DTcomment{Source files}.
+			.4 main.c\DTcomment{Init. and main loop}.
+			.4 stm32f7xx\_it.c\DTcomment{Interrupt handlers}.
+			.4 stm32f7xx\_hal\_msp.c\DTcomment{Low-level peripheral setup}.
+			.4 system\_stm32f7xx.c\DTcomment{Core init. and clock state}.
+			.3 Startup/\DTcomment{Startup code and interrupt vectors}.
+			.4 startup\_stm32f767zitx.s.
+			.2 Drivers/\DTcomment{Hardware support}.
+			.3 CMSIS/\DTcomment{Core and MCU definitions}.
+			.3 STM32F7xx\_HAL\_Driver/.
+			.2 STM32F767ZITX\_FLASH.ld.
+			.2 STM32F767ZITX\_RAM.ld.
+			.2 test\_project.ioc\DTcomment{CubeMX configuration}.
+		}
+	\end{minipage}
+	\caption{Main components of the STM32CubeMX-generated project.}
+	\label{fig:stm32_project_structure}
 \end{figure}
 
-\begin{table}[H]
-  \centering
-  \caption{Main firmware settings.}
-  \label{tab:firmware_settings}
-  \small
-  \renewcommand{\arraystretch}{1.15}
-  \begin{tabularx}{\columnwidth}{@{}l >{\raggedright\arraybackslash}X@{}}
-    \hline
-    \textbf{Macro} & \textbf{Purpose} \\
-    \hline
-    \texttt{SCHED\_ALGO} & Select SuperLoop or chunked EDF \\
-    \texttt{EDF\_CHUNK\_US} & Set the maximum chunk size in microseconds \\
-    \texttt{ENABLE\_SYNTHETIC} & Enable synthetic tasks \\
-    \texttt{ENABLE\_REAL\_SENSORS} & Enable physical-sensor tasks \\
-    \hline
-  \end{tabularx}
-\end{table}
+\subsection{Default execution model}
+
+
+The generated \texttt{main()} function first initializes the system and peripherals, then enters an infinite \texttt{while (1)} loop (Fig.~\ref{fig:stm32_main}). STM32CubeMX marks \texttt{USER CODE} regions where developers can add their own code without losing it when the project is generated again. By default, the loop contains no application functions.
+
+Application functions can be called from inside this loop. In a SuperLoop, these functions run in a fixed order, and the sequence repeats after the last function returns~\cite{KeilSuperLoop} (Fig.~\ref{fig:superloop_execution}). For example, \texttt{taskB()} runs only after \texttt{taskA()} returns, so the execution time of one function affects when the next function can start. In our application, such functions perform computations or read sensor data.
+
+\begin{figure}[t]
+	\centering
+	\begin{minipage}{0.95\columnwidth}
+		\begin{lstlisting}[style=ieeec]
+			int main(void) {
+				/* CubeMX-generated initialization */
+				MPU_Config();
+				HAL_Init();
+				SystemClock_Config();
+				MX_GPIO_Init();
+				/* Other peripheral initialization */
+				
+				/* USER CODE BEGIN 2 */
+				/* User-defined application setup */
+				/* USER CODE END 2 */
+				
+				/* USER CODE BEGIN WHILE */
+				while (1)
+				{
+					/* USER CODE END WHILE */
+					
+					/* USER CODE BEGIN 3 */
+					/* User-defined functions */
+				}
+				/* USER CODE END 3 */
+			}
+		\end{lstlisting}
+	\end{minipage}
+	\caption{Simplified STM32CubeMX-generated main function showing system initialization, user-code regions, and the infinite loop.}
+	\label{fig:stm32_main}
+\end{figure}
+
+\begin{figure}[t]
+	\centering
+	\includegraphics[width=\columnwidth]{superloop_example.png}
+	\caption{Example of SuperLoop execution. Functions are executed sequentially in a fixed order, and the loop repeats indefinitely.}
+	\label{fig:superloop_execution}
+\end{figure}
+
+\subsection{User defined tasks}
+
+\subsubsection{Synthetic tasks}
+
+We use synthetic tasks to create CPU workload without reading data from sensors. Listing~\ref{lst:synthetic_task} shows one example, where a function updates a stored value through 10,000 iterations. The number of iterations can be changed to control the amount of computation, although the actual execution time must be measured on the STM32.
+
+\begin{lstlisting}[
+	style=ieeec,
+	caption={Example of a synthetic computation.},
+	label={lst:synthetic_task}
+	]
+	static volatile uint32_t state = 1U;
+	
+	void SyntheticTask_Run(void)
+	{
+		uint32_t value = state;
+		
+		for (uint32_t i = 0; i < 10000U; i++) {
+			value = value * 1664525U + i;
+		}
+		
+		state = value;
+	}
+\end{lstlisting}
+
+\subsubsection{Sensor tasks}
+
+Unlike synthetic tasks, sensor tasks must communicate with external devices. Listing~\ref{lst:dht11_read} shows how the STM32 reads data from a DHT11 sensor. The function first holds the data pin low for 30 ms and then reads the sensor response. During this operation, the main loop cannot start the next function until the current one returns.
+
+Sensor readings also have timing limits. The DHT11 requires at least 1 second between readings~\cite{DHT11Datasheet}, while the HC-SR04 recommends more than 60 ms between measurements~\cite{HCSR04Datasheet}. Calling these functions on every pass through the main loop may violate these limits. Instead, we call sensor-reading functions at set intervals~\cite{Koopman2015MultiRate}. The next section introduces the periodic task model used in our experiments.
+
+\begin{lstlisting}[
+	style=ieeec,
+	caption={Example of a DHT11 sensor read operation.},
+	label={lst:dht11_read}
+	]
+	int DHT11_Read(uint8_t *temp, uint8_t *hum)
+	{
+		DHT11_SetOutput();
+		
+		HAL_GPIO_WritePin(DHT11_PORT,
+		DHT11_PIN, GPIO_PIN_RESET);
+		
+		HAL_Delay(30);
+		
+		return DHT11_ReadTransaction(temp, hum);
+	}
+\end{lstlisting}
 
 
 
@@ -208,11 +309,17 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 
 
+
 \section{Schedulers}
 \label{sec:schedulers}
-We consider two schedulers: SuperLoop and chunked Earliest Deadline First (EDF). For illustration, we also show a fully preemptive EDF scheduler.
+We compare two scheduling approaches: a periodic SuperLoop and chunked Earliest Deadline First (EDF). We also show fully preemptive EDF for comparison.
+
+
 \subsection{SuperLoop}
-SuperLoop repeatedly polls tasks in a fixed order. For each task, it checks whether the next release time has been reached. If so, the job runs to completion before the next task is polled. The key steps are outlined in Algorithm~\ref{alg:superloop}.
+
+We use a periodic SuperLoop as a non-preemptive scheduler that checks tasks in a fixed order~\cite{Koopman2015MultiRate}. Each task runs only when its next release time has been reached~\cite{Jones2024RTOSPart1}. Once started, a task runs to completion before the next task is checked. Algorithm~\ref{alg:superloop} shows this process.
+
+
 
 %
 \begin{algorithm}[H]
@@ -354,7 +461,6 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 \clearpage
 
 \section{Performance evaluation}
-\todo{AB: To start the evaluation of synthetic workload scenario}
 \subsection{Synthetic workload}
 \subsection{Real sensors workload}
 
