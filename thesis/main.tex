@@ -316,15 +316,26 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 
 
-\section{Schedulers}
+\section{Superloop and EDF Schedulers}
 \label{sec:schedulers}
-We compare two scheduling approaches: a periodic Superloop and chunked Earliest Deadline First (EDF). % We also show fully preemptive EDF for comparison.
+
+We next describe the theoretical background on the Superloop and EDF schedulers, which we later compare in terms of the achievable scheduling performance.
 
 
 \subsection{Superloop}
 \label{sec:superloop}
 
-We use a periodic Superloop as a non-preemptive scheduler, since it determines which tasks to execute based on their release times and a fixed order in the main loop. Each task is checked in sequence and runs only when its next release time has been reached. Similar approaches to periodic task scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Once started, a task runs to completion before the next task is checked. Algorithm~\ref{alg:superloop} shows this process. % We skip releases that occur while a job is running instead of queuing them. For sensor-monitoring tasks, a delayed execution may already acquire recent data, making additional executions for missed releases unnecessary.
+The key features of the Superloop scheduler:
+%
+\begin{itemize}
+\item periodically invoking;
+\item non-preemptive;
+\item 
+\end{itemize}
+
+since it determines which tasks to execute based on their release times and a fixed order in the main loop.
+
+Each task is checked in sequence and runs only when its next release time has been reached. Similar approaches to periodic task scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Once started, a task runs to completion before the next task is checked. Algorithm~\ref{alg:superloop} shows this process. % We skip releases that occur while a job is running instead of queuing them. For sensor-monitoring tasks, a delayed execution may already acquire recent data, making additional executions for missed releases unnecessary.
 
 %
 \begin{algorithm}[H]
