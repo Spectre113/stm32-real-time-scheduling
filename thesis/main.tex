@@ -70,7 +70,7 @@ First, we compare Superloop and chunked EDF for periodic tasks with implicit dea
 
 \subsection{Paper organization}
 
-First, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:project_structure}. Sections~\ref{sec:default_execution_model} and~\ref{sec:user_defined_tasks} explain how application functions execute and introduce the computation and sensor tasks used in our application. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
+Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:project_structure}. Sections~\ref{sec:default_execution_model} and~\ref{sec:user_defined_tasks} explain how application functions execute and introduce the computation and sensor tasks used in our application. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
 
 
 
@@ -235,9 +235,7 @@ We use synthetic tasks to create CPU workload without reading data from sensors.
 \subsubsection{Sensor tasks}
 \label{sec:sensor_tasks}
 
-Unlike synthetic tasks, sensor tasks must communicate with external devices. Listing~\ref{lst:dht11_read} shows how the STM32 reads data from a DHT11 sensor. The function first holds the data pin low for 30 ms and then reads the sensor response. With this blocking implementation, the main loop waits for the sensor read to complete before calling another function
-
-Sensor readings also have timing limits. For example, the DHT11 requires at least 1 second between readings~\cite{DHT11Datasheet}, while the HC-SR04 recommends more than 60 ms between measurements~\cite{HCSR04Datasheet}. Calling these functions on every pass through the main loop may violate these limits. Instead, we call sensor-reading functions at set intervals~\cite{Koopman2015MultiRate}. The next section introduces the periodic task model used in our experiments.
+Unlike synthetic tasks, sensor tasks must communicate with external devices. Listing~\ref{lst:dht11_read} shows how the STM32 reads data from a DHT11 sensor. The function first holds the data pin low for 30 ms and then reads the sensor response. With this blocking implementation, the main loop waits for the sensor read to complete before calling another function.
 
 \begin{lstlisting}[
 	style=ieeec,
@@ -256,6 +254,8 @@ Sensor readings also have timing limits. For example, the DHT11 requires at leas
 		return DHT11_ReadTransaction(temp, hum);
 	}
 \end{lstlisting}
+
+Sensor readings also have timing limits. For example, the DHT11 requires at least 1 second between readings~\cite{DHT11Datasheet}, while the HC-SR04 recommends more than 60 ms between measurements~\cite{HCSR04Datasheet}. Calling these functions on every pass through the main loop may violate these limits.
 
 
 
@@ -318,15 +318,13 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 \section{Schedulers}
 \label{sec:schedulers}
-We compare two scheduling approaches: a periodic Superloop and chunked Earliest Deadline First (EDF). We also show fully preemptive EDF for comparison.
+We compare two scheduling approaches: a periodic Superloop and chunked Earliest Deadline First (EDF). %We also show fully preemptive EDF for comparison.
 
 
 \subsection{Superloop}
 \label{sec:superloop}
 
-We use a periodic Superloop as a non-preemptive scheduler that checks tasks in a fixed order~\cite{Koopman2015MultiRate}. Each task runs only when its next release time has been reached~\cite{Jones2024RTOSPart1}. Once started, a task runs to completion before the next task is checked. Algorithm~\ref{alg:superloop} shows this process.
-
-
+We use a periodic Superloop as a non-preemptive scheduler, since it determines which tasks to execute based on their release times and a fixed order in the main loop. Each task is checked in sequence and runs only when its next release time has been reached. Similar approaches to periodic task scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Once started, a task runs to completion before the next task is checked. Algorithm~\ref{alg:superloop} shows this process.
 
 %
 \begin{algorithm}[H]
