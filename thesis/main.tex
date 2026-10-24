@@ -82,10 +82,27 @@ Initially, in Section~\ref{sec:STM32_background}, we provide the necessary backg
 \section{Background on STM32}
 \label{sec:STM32_background}
 
+Let us first provide the necessary preliminaries on the hardware components, which we later use in our evaluation for schedulers.
+
 \subsection{Hardware platform}
 \label{sec:hw_components}
 
-We use an STM32F767 microcontroller with four sensors in our experiments (Fig.~\ref{fig:stm32_hw}). The sensors collect different types of data and use different interfaces, as shown in Table~\ref{tab:sensor_interfaces}. The code that reads and processes their data forms the sensor-based workload for our scheduling experiments.
+The central processing unit in our hardware system is an STM32 microcontroller, as illustrated in Fig.~\ref{fig:stm32_hw}. \todo{AB: To describe relevant details about STM32 microcontroller. To include:}
+%
+\begin{itemize}
+\item How many microcontrollers? Uniprocessor or multiprocess system?
+\end{itemize}
+
+In turn, to model the workload to be processed by the STM32 microcontroller, we use several peripheral sensors, which are summarized in Table~\ref{tab:sensor_interfaces}. For every sensor,
+%
+\begin{itemize}
+\item it is directly connected to the STM32 microcontroller by using some of the hardware connection interfaces from the ones listed in Table~\ref{tab:sensor_interfaces};
+\item it is associated with some specialized task, which generates an infinite sequence of periodic jobs to be processed by the microcontroller (more formal details are in Section~\ref{sec:system_model});
+\item these sensors' tasks are to be executed concurrently upon the same processor, what requires the use of some scheduler.
+\end{itemize}
+%
+
+The code that reads and processes their data forms the sensor-based workload for our scheduling experiments.
 
 
 \begin{table}[H]
