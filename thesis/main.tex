@@ -70,7 +70,7 @@ First, we compare Superloop and chunked EDF for periodic tasks with implicit dea
 
 \subsection{Paper organization}
 
-Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:project_structure}. Sections~\ref{sec:default_execution_model} and~\ref{sec:user_defined_tasks} explain how application functions execute and introduce the computation and sensor tasks used in our application. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
+Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:project_structure}. Sections~\ref{sec:default_execution_model} and~\ref{sec:application_workloads} describe how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
 
 
 
@@ -117,7 +117,7 @@ We use an STM32F767 microcontroller with four sensors in our experiments (Fig.~\
 
 \begin{figure}[t]
 	\centering
-	\includegraphics[width=1\columnwidth]{stm32_hardware_platform.png}
+	\includegraphics[width=1\columnwidth,trim=0 40mm 0 0,clip]{stm32_hardware_platform.png}
 	\caption{Sensor platform based on STM32F767.}
 	\label{fig:stm32_hw}
 \end{figure}
@@ -129,7 +129,10 @@ We use an STM32F767 microcontroller with four sensors in our experiments (Fig.~\
 \subsection{STM32 Project Structure}
 \label{sec:project_structure}
 
-We use STM32CubeMX to configure the microcontroller pins and peripherals and generate a C project for STM32CubeIDE where we can debug, execute and edit the code. Fig.~\ref{fig:stm32_project_structure} shows the main project components. Application source files and headers are placed in \texttt{Core/Src} and \texttt{Core/Inc}, respectively. The source files include \texttt{main.c}, which contains system initialization and the main loop from which application functions are called.
+We use STM32CubeMX to configure the microcontroller pins and peripherals and generate a C project. We then use STM32CubeIDE to edit, build, and debug the code.
+
+Fig.~\ref{fig:stm32_project_structure} shows the main project components. Application source files are stored in \texttt{Core/Src}, while header files are stored in \texttt{Core/Inc}. The \texttt{main.c} file contains system initialization and the main loop that calls application functions.
+
 
 
 \begin{figure}[t]
@@ -164,7 +167,7 @@ We use STM32CubeMX to configure the microcontroller pins and peripherals and gen
 \subsection{Default execution model}
 \label{sec:default_execution_model}
 
-The generated \texttt{main()} function first initializes the system and peripherals, then enters an infinite \texttt{while (1)} loop. (Listing~\ref{lst:stm32_main}). STM32CubeMX marks \texttt{USER CODE} regions where developers can add their own code without losing it when the project is generated again. By default, the loop contains no application functions.
+The generated \texttt{main()} function first initializes the system and peripherals, then enters an infinite \texttt{while (1)} loop (Listing~\ref{lst:stm32_main}). STM32CubeMX marks \texttt{USER CODE} regions where developers can add their own code without losing it when the project is generated again. By default, the loop contains no application functions.
 
 \begin{lstlisting} [
 	style=ieeec,
@@ -196,7 +199,7 @@ The generated \texttt{main()} function first initializes the system and peripher
 	}
 \end{lstlisting}
 
-Application functions can be called from inside this loop. In a Superloop, these functions run in a fixed order, and the sequence repeats after the last function returns~\cite{KeilSuperLoop} (Fig.~\ref{fig:superloop_execution}). For example, \texttt{taskB()} runs only after \texttt{taskA()} returns, so the execution time of one function affects when the next function can start.
+Application functions can be called from inside this loop. In a Superloop, these functions run in a fixed order, and the sequence repeats after the last function returns~\cite{KeilSuperLoop} (Fig.~\ref{fig:superloop_execution}). For example, \texttt{findMaximum()} runs only after \texttt{findAverage()} returns, so the execution time of one function affects when the next function can start.
 
 \begin{figure}[b]
 	\centering
@@ -205,57 +208,13 @@ Application functions can be called from inside this loop. In a Superloop, these
 	\label{fig:superloop_execution}
 \end{figure}
 
-\subsection{User defined tasks}
-\label{sec:user_defined_tasks}
 
-\subsubsection{Synthetic tasks}
-\label{sec:synthetic_tasks}
+\subsection{Application Workloads}
+\label{sec:application_workloads}
 
-We use synthetic tasks to create CPU workload without reading data from sensors. Listing~\ref{lst:synthetic_task} shows one example, where a function updates a stored value through 10,000 iterations. The number of iterations can be changed to control the amount of computation, although the actual execution time must be measured on the STM32.\\\\
+We consider two types of application tasks: synthetic computations and sensor readings. Synthetic tasks perform calculations without using external devices. Their execution time can be adjusted to create different CPU loads. This allows us to compare schedulers under controlled conditions.
 
-\begin{lstlisting}[
-	style=ieeec,
-	caption={Example of a synthetic computation.},
-	label={lst:synthetic_task}
-	]
-	static volatile uint32_t state = 1U;
-	
-	void SyntheticTask_Run(void)
-	{
-		uint32_t value = state;
-		
-		for (uint32_t i = 0; i < 10000U; i++) {
-			value = value * 1664525U + i;
-		}
-		
-		state = value;
-	}
-\end{lstlisting}
-
-\subsubsection{Sensor tasks}
-\label{sec:sensor_tasks}
-
-Unlike synthetic tasks, sensor tasks must communicate with external devices. Listing~\ref{lst:dht11_read} shows how the STM32 reads data from a DHT11 sensor. The function first holds the data pin low for 30 ms and then reads the sensor response. With this blocking implementation, the main loop waits for the sensor read to complete before calling another function.
-
-\begin{lstlisting}[
-	style=ieeec,
-	caption={Example of a DHT11 sensor read operation.},
-	label={lst:dht11_read}
-	]
-	int DHT11_Read(uint8_t *temp, uint8_t *hum)
-	{
-		DHT11_SetOutput();
-		
-		HAL_GPIO_WritePin(DHT11_PORT,
-		DHT11_PIN, GPIO_PIN_RESET);
-		
-		HAL_Delay(30);
-		
-		return DHT11_ReadTransaction(temp, hum);
-	}
-\end{lstlisting}
-
-Sensor readings also have timing limits. For example, the DHT11 requires at least 1 second between readings~\cite{DHT11Datasheet}, while the HC-SR04 recommends more than 60 ms between measurements~\cite{HCSR04Datasheet}. Calling these functions on every pass through the main loop may violate these limits.
+Sensor tasks read and process data from sensors connected to the STM32. Unlike synthetic tasks, they interact with real hardware. We use these tasks to evaluate the schedulers under real sensor workloads.
 
 
 
@@ -321,22 +280,20 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 We next describe the Superloop and chunked EDF schedulers used in our experiments. Fully preemptive EDF serves as a reference for comparison.
 
-Both implementations use the same policy for missed releases. After a job completes, its next release is advanced by one period. Any subsequent releases earlier than its completion time are skipped. This avoids catch-up executions that may be unnecessary for monitoring tasks.
-
 \subsection{Superloop}
 \label{sec:superloop}
 
-The key features of the Superloop scheduler:
+The Superloop scheduler has three key features:
 %
 \begin{itemize}
-\item periodically invoking;
-\item non-preemptive;
-\item 
+	\item Periodic tasks: each task can run only after its next release time.
+	\item Fixed order: ready tasks run in the same order.
+	\item Non-preemptive: each job runs until it finishes.
 \end{itemize}
 
-since it determines which tasks to execute based on their release times and a fixed order in the main loop.
+At the start of each loop iteration, the scheduler checks all tasks using the same current time. A task that becomes ready during execution is considered in the next iteration.
 
-At the start of each loop iteration, the scheduler checks the readiness of all tasks. It then executes the ready tasks in a fixed order. Each job runs to completion before the next one starts. Similar approaches to periodic scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Algorithm~\ref{alg:superloop} shows this process.
+Similar approaches to periodic task scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Algorithm~\ref{alg:superloop} shows this process.
 
 %
 \begin{algorithm}[H]
@@ -394,16 +351,24 @@ In contrast, fully preemptive EDF selects the ready job with the earliest absolu
 
 Fig.~\ref{fig:scheduler_schedules}\subref{fig:edf_schedule} shows the EDF schedule for the same task set. At $t=0$, $J_{2,1}$ has the earlier deadline and executes until $t=10$ ms. Job $J_{1,1}$ then starts, but is preempted at $r_{2,2}=20$ ms because the new job has a deadline $d_{2,2}=40$ ms, earlier than $d_{1,1}=50$ ms. Job $J_{2,2}$ executes until $t=30$ ms, after which $J_{1,1}$ resumes and completes at $t=38$ ms. The next job of $\tau_2$ executes from $t=40$ to $t=50$ ms. Thus, no deadline is missed and no release is skipped in this example.
 
+
 \subsection{Chunked Earliest Deadline First}
 \label{chunked_EDF_subsection}
 
-Unlike fully preemptive EDF, our chunked EDF implementation executes synthetic workloads in non-preemptive chunks of at most $\Delta$ ms.
+Unlike fully preemptive EDF, our chunked EDF implementation allows switching between jobs only after an execution step finishes. Its key features are:
+%
+\begin{itemize}
+	\item Earliest deadline first: the ready job with the earliest absolute deadline is selected.
+	\item Chunked execution: jobs run in non-preemptive steps. For computational workloads, each chunk lasts at most $\Delta$ ms.
+	\item Repeated selection: the scheduler selects a job after each execution step.
+\end{itemize}
 
-Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. The Boolean flag $a_i$ indicates whether task $\tau_i$ has an unfinished job. At each iteration, $\mathcal{R}$ contains the indices of runnable tasks. These include tasks with due releases and active jobs that can resume. Sensor jobs waiting for hardware are excluded.
+Algorithm~\ref{alg:chunked_edf} shows this process. The Boolean flag $a_i$ indicates whether task $\tau_i$ has an unfinished job. At each iteration, $\mathcal{R}$ contains the indices of runnable tasks. These include tasks with due releases and active jobs that can resume. Jobs waiting for an external event are excluded.
 
-The scheduler selects the job with the earliest absolute deadline. For an active job, $d_i=r_i+D_i$, where $r_i$ is its saved release time. Otherwise, $d_i=t_i^{\mathsf{next}}+D_i$. The selection is repeated after each execution step.
+For an active job, $d_i=r_i+D_i$, where $r_i$ is its saved release time. Otherwise, $d_i=t_i^{\mathsf{next}}+D_i$.
 
-Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, the first job of $\tau_1$ is still executing a chunk, which ends at $t=22$ ms. The new job of $\tau_2$ therefore starts at $t=22$ ms, with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. The interrupted job of $\tau_1$ then resumes and completes at $t=38$ ms.
+Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, job $J_{1,1}$ is still executing a chunk. This chunk ends at $t=22$ ms. Job $J_{2,2}$ then starts with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. Job $J_{1,1}$ then resumes and completes at $t=38$ ms.
+
 
 %
 \begin{algorithm}[H]
