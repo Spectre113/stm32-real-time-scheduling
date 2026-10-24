@@ -319,8 +319,9 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 \section{Superloop and EDF Schedulers}
 \label{sec:schedulers}
 
-We next describe the theoretical background on the Superloop and EDF schedulers, which we later compare in terms of the achievable scheduling performance.
+We next describe the Superloop and chunked EDF schedulers used in our experiments. Fully preemptive EDF serves as a reference for comparison.
 
+Both implementations use the same policy for missed releases. After a job completes, its next release is advanced by one period. Any subsequent releases earlier than its completion time are skipped. This avoids catch-up executions that may be unnecessary for monitoring tasks.
 
 \subsection{Superloop}
 \label{sec:superloop}
@@ -335,7 +336,7 @@ The key features of the Superloop scheduler:
 
 since it determines which tasks to execute based on their release times and a fixed order in the main loop.
 
-Each task is checked in sequence and runs only when its next release time has been reached. Similar approaches to periodic task scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Once started, a task runs to completion before the next task is checked. Algorithm~\ref{alg:superloop} shows this process. % We skip releases that occur while a job is running instead of queuing them. For sensor-monitoring tasks, a delayed execution may already acquire recent data, making additional executions for missed releases unnecessary.
+At the start of each loop iteration, the scheduler checks the readiness of all tasks. It then executes the ready tasks in a fixed order. Each job runs to completion before the next one starts. Similar approaches to periodic scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Algorithm~\ref{alg:superloop} shows this process.
 
 %
 \begin{algorithm}[H]
@@ -343,30 +344,44 @@ Each task is checked in sequence and runs only when its next release time has be
 	\label{alg:superloop}
 	\begin{algorithmic}[1]
 		\Function{Superloop}{$\mathcal{T}$}
-		
 		\State $t_i^{\mathsf{next}} \gets 0,\quad i=1,\ldots,n$
 		\Comment{Initial releases}
 		
 		\While{true}
-		\For{$i \gets 1$ to $n$}
-		\Comment{Fixed task order}
+		\Comment{Infinite cycle}
 		\State $t^{\mathsf{cur}} \gets \textproc{Now}()$
-		\Comment{Read current system time}
+		\Comment{Get current system time}
 		
-		\If{$t_i^{\mathsf{next}} \leq t^{\mathsf{cur}}$}
-		\State $J_{i,j} \gets$ \Call{ReleaseJob}{$\tau_i,t_i^{\mathsf{next}}$}
+		\For{$i \gets 1$ to $n$}
+		\State $b_i \gets
+		(t_i^{\mathsf{next}} \leq t^{\mathsf{cur}})$
+		\Comment{Save readiness}
+		\EndFor
+		
+		\For{$i \gets 1$ to $n$}
+		\If{$b_i$}
+		\State $J_{i,j} \gets
+		(\tau_i,t_i^{\mathsf{next}})$
+		\Comment{Keep release time}
 		\State \Call{Execute}{$J_{i,j}$}
-		\Comment{Non-preemptive}
 		\State $f_{i,j} \gets \textproc{Now}()$
-		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
-		\State \textbf{while} $t_i^{\mathrm{next}} < f_{i,j}$
-		\textbf{do} $t_i^{\mathrm{next}} \gets t_i^{\mathrm{next}} + P_i$
+		\State $t_i^{\mathsf{next}} \gets
+		t_i^{\mathsf{next}}+P_i$
+		\Comment{Advance, then skip}
+		\State \textbf{while}
+		$t_i^{\mathsf{next}}<f_{i,j}$
+		\textbf{do}
+		$t_i^{\mathsf{next}}\gets
+		t_i^{\mathsf{next}}+P_i$
 		\EndIf
 		\EndFor
 		\EndWhile
 		\EndFunction
 	\end{algorithmic}
 \end{algorithm}
+
+
+
 
 Fig.~\ref{fig:scheduler_schedules}\subref{fig:superloop_schedule} illustrates the Superloop schedule for tasks $\tau_1$ and $\tau_2$. Both tasks release their first jobs at $t=0$. Since $\tau_1$ comes first in the polling order, $J_{1,1}$ executes until $t=18$ ms. Job $J_{2,1}$ then starts and completes at $f_{2,1}=28$ ms, missing its deadline $d_{2,1}=20$ ms.
 
@@ -382,63 +397,67 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:edf_schedule} shows the EDF schedu
 \subsection{Chunked Earliest Deadline First}
 \label{chunked_EDF_subsection}
 
-Unlike classical EDF, our chunked EDF implementation executes jobs in non-preemptive chunks of at most \(\Delta\) ms. Sensor operations are split only at points that preserve the timing requirements of the interface.
+Unlike fully preemptive EDF, our chunked EDF implementation executes synthetic workloads in non-preemptive chunks of at most $\Delta$ ms.
 
-Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. The scheduler maintains a set $\mathcal{R}$ of released but unfinished jobs. After each chunk, it updates $\mathcal{R}$ with newly released jobs and selects the job with the earliest absolute deadline.
+Algorithm~\ref{alg:chunked_edf} outlines chunked EDF. The Boolean flag $a_i$ indicates whether task $\tau_i$ has an unfinished job. At each iteration, $\mathcal{R}$ contains the indices of runnable tasks. These include tasks with due releases and active jobs that can resume. Sensor jobs waiting for hardware are excluded.
+
+The scheduler selects the job with the earliest absolute deadline. For an active job, $d_i=r_i+D_i$, where $r_i$ is its saved release time. Otherwise, $d_i=t_i^{\mathsf{next}}+D_i$. The selection is repeated after each execution step.
 
 Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, the first job of $\tau_1$ is still executing a chunk, which ends at $t=22$ ms. The new job of $\tau_2$ therefore starts at $t=22$ ms, with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. The interrupted job of $\tau_1$ then resumes and completes at $t=38$ ms.
 
+%
 \begin{algorithm}[H]
 	\caption{Chunked EDF Scheduler}
 	\label{alg:chunked_edf}
 	\begin{algorithmic}[1]
-
 		\Function{ChunkedEDF}{$\mathcal{T},\Delta$}
-		\State $\mathcal{R} \gets \emptyset$
-		\Comment{Set of unfinished jobs}
-		\State $t_i^{\mathsf{next}} \gets 0,\quad i=1,\ldots,n$
-		\Comment{Initial releases}
-
+		\State $t_i^{\mathsf{next}}\gets 0,\quad
+		a_i\gets\mathsf{false},\quad i=1,\ldots,n$
+		
 		\While{true}
-
-		\State $t^{\mathsf{cur}} \gets \textproc{Now}()$
-		\Comment{Read current system time}
-
-		\ForAll{$\tau_i \in \mathcal{T}$}
-		\Comment{Check releases}
-		\If{$t_i^{\mathsf{next}} \leq t^{\mathsf{cur}}$ and no $\tau_i$ job in $\mathcal{R}$}
-		\State $J_{i,j} \gets$ \Call{ReleaseJob}{$\tau_i,t_i^{\mathsf{next}}$}
-		\State $\mathcal{R} \gets \mathcal{R} \cup \{J_{i,j}\}$
-		\Comment{Add new job}
-		\EndIf
-		\EndFor
-
-		\If{$\mathcal{R} \neq \emptyset$}
-		\Comment{Pending work}
-
-		\State $J_{i,j} \gets
-		\Call{SelectEDF}{\mathcal{R}}$
+		\Comment{Infinite cycle}
+		\State $t^{\mathsf{cur}}\gets\textproc{Now}()$
+		\Comment{Get current system time}
+		\State $\mathcal{R}\gets
+		\{i\mid\Call{Ready}{i,t^{\mathsf{cur}}}\}$
+		\Comment{Ready task indices}
+		
+		\If{$\mathcal{R}\neq\emptyset$}
+		\State $i^\star\gets
+		\arg\min_{i\in\mathcal{R}}d_i$
 		\Comment{Earliest deadline}
-
-		\State \Call{ExecuteChunk}{$J_{i,j},\Delta$}
-		\Comment{Duration $\leq\Delta$}
-
-		\If{\Call{Completed}{$J_{i,j}$}}
-		\State $f_{i,j} \gets \textproc{Now}()$
-		\State $t_i^{\mathsf{next}} \gets t_i^{\mathsf{next}} + P_i$
-		\State \textbf{while} $t_i^{\mathrm{next}} < f_{i,j}$
-		\textbf{do} $t_i^{\mathrm{next}} \gets t_i^{\mathrm{next}} + P_i$
-		\State $\mathcal{R} \gets \mathcal{R} \setminus \{J_{i,j}\}$
-		\Comment{Remove completed job}
+		
+		\If{$\neg a_{i^\star}$}
+		\State $r_{i^\star}\gets
+		t_{i^\star}^{\mathsf{next}}$;
+		$a_{i^\star}\gets\mathsf{true}$
+		\Comment{Save release}
 		\EndIf
-
+		
+		\State \Call{ExecuteStep}{$i^\star,\Delta$}
+		\Comment{At most $\Delta$}
+		
+		\If{\Call{Completed}{$i^\star$}}
+		\State $f\gets\textproc{Now}()$
+		\State $t_{i^\star}^{\mathsf{next}}
+		\gets t_{i^\star}^{\mathsf{next}}
+		+P_{i^\star}$
+		\Comment{Advance, then skip}
+		\State \textbf{while}
+		$t_{i^\star}^{\mathsf{next}}<f$
+		\textbf{do}
+		$t_{i^\star}^{\mathsf{next}}
+		\gets t_{i^\star}^{\mathsf{next}}
+		+P_{i^\star}$
+		\State $a_{i^\star}\gets\mathsf{false}$
 		\EndIf
-
+		\EndIf
 		\EndWhile
-
 		\EndFunction
 	\end{algorithmic}
 \end{algorithm}
+
+
 
 \begin{figure*}[p]
 	\centering
