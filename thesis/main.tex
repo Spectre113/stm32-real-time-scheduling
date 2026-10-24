@@ -310,13 +310,12 @@ Similar approaches to periodic task scheduling in a main loop are described by K
 		\Comment{Get current system time}
 		
 		\For{$i \gets 1$ to $n$}
-		\State $b_i \gets
-		(t_i^{\mathsf{next}} \leq t^{\mathsf{cur}})$
+		\State $\mathit{ready}_i \gets (t_i^{\mathsf{next}} \leq t^{\mathsf{cur}})$
 		\Comment{Save readiness}
 		\EndFor
 		
 		\For{$i \gets 1$ to $n$}
-		\If{$b_i$}
+		\If{$\mathit{ready}_i$}
 		\State $J_{i,j} \gets
 		(\tau_i,t_i^{\mathsf{next}})$
 		\Comment{Keep release time}
@@ -367,9 +366,6 @@ Algorithm~\ref{alg:chunked_edf} shows this process. The Boolean flag $a_i$ indic
 
 For an active job, $d_i=r_i+D_i$, where $r_i$ is its saved release time. Otherwise, $d_i=t_i^{\mathsf{next}}+D_i$.
 
-Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, job $J_{1,1}$ is still executing a chunk. This chunk ends at $t=22$ ms. Job $J_{2,2}$ then starts with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. Job $J_{1,1}$ then resumes and completes at $t=38$ ms.
-
-
 %
 \begin{algorithm}[H]
 	\caption{Chunked EDF Scheduler}
@@ -377,7 +373,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 	\begin{algorithmic}[1]
 		\Function{ChunkedEDF}{$\mathcal{T},\Delta$}
 		\State $t_i^{\mathsf{next}}\gets 0,\quad
-		a_i\gets\mathsf{false},\quad i=1,\ldots,n$
+		\mathit{hasActiveJob}_i\gets\mathsf{false},\quad i=1,\ldots,n$
 		
 		\While{true}
 		\Comment{Infinite cycle}
@@ -392,10 +388,9 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 		\arg\min_{i\in\mathcal{R}}d_i$
 		\Comment{Earliest deadline}
 		
-		\If{$\neg a_{i^\star}$}
-		\State $r_{i^\star}\gets
-		t_{i^\star}^{\mathsf{next}}$;
-		$a_{i^\star}\gets\mathsf{true}$
+		\If{$\neg \mathit{hasActiveJob}_{i^\star}$}
+		\State $r_{i^\star}\gets t_{i^\star}^{\mathsf{next}}$;
+		\State $\mathit{hasActiveJob}_{i^\star}\gets\mathsf{true}$
 		\Comment{Save release}
 		\EndIf
 		
@@ -414,7 +409,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 		$t_{i^\star}^{\mathsf{next}}
 		\gets t_{i^\star}^{\mathsf{next}}
 		+P_{i^\star}$
-		\State $a_{i^\star}\gets\mathsf{false}$
+		\State $\mathit{hasActiveJob}_{i^\star}\gets\mathsf{false}$
 		\EndIf
 		\EndIf
 		\EndWhile
@@ -422,7 +417,7 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 	\end{algorithmic}
 \end{algorithm}
 
-
+Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task set with $\Delta=4$ ms. At $r_{2,2}=20$ ms, job $J_{1,1}$ is still executing a chunk. This chunk ends at $t=22$ ms. Job $J_{2,2}$ then starts with a preemption delay of $\delta=2$ ms. It executes in chunks of 4, 4, and 2 ms and completes at $t=32$ ms. The shorter final chunk reflects the remaining work. Job $J_{1,1}$ then resumes and completes at $t=38$ ms.
 
 \begin{figure*}[p]
 	\centering
