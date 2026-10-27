@@ -45,7 +45,7 @@
 	}
 }
 \maketitle
-%\listoftodos
+\listoftodos
 
 \section{Introduction}
 
@@ -87,22 +87,23 @@ Let us first provide the necessary preliminaries on the hardware components, whi
 \subsection{Hardware platform}
 \label{sec:hw_components}
 
-The central processing unit in our hardware system is an STM32 microcontroller, as illustrated in Fig.~\ref{fig:stm32_hw}. \todo{AB: To describe relevant details about STM32 microcontroller. To include:}
+The central component of our hardware platform is the STM32F767 microcontroller, shown in Fig.~\ref{fig:stm32_hw}. It has the following characteristics:
 %
 \begin{itemize}
-\item How many microcontrollers? Uniprocessor or multiprocess system?
+	\item It is a single-core microcontroller.
+	\item It uses an ARM Cortex-M7 processor core.
+	\item Its maximum clock frequency is 216 MHz.
 \end{itemize}
 
-In turn, to model the workload to be processed by the STM32 microcontroller, we use several peripheral sensors, which are summarized in Table~\ref{tab:sensor_interfaces}. For every sensor,
+To generate workloads for the STM32 microcontroller, we use several sensors, summarized in Table~\ref{tab:sensor_interfaces}. Each sensor has the following properties:
 %
 \begin{itemize}
-\item it is directly connected to the STM32 microcontroller by using some of the hardware connection interfaces from the ones listed in Table~\ref{tab:sensor_interfaces};
-\item it is associated with some specialized task, which generates an infinite sequence of periodic jobs to be processed by the microcontroller (more formal details are in Section~\ref{sec:system_model});
-\item these sensors' tasks are to be executed concurrently upon the same processor, what requires the use of some scheduler.
+	\item It is connected to the STM32 through one of the hardware interfaces listed in Table~\ref{tab:sensor_interfaces}.
+	\item It is associated with a periodic task that generates a sequence of jobs, as formally described in Section~\ref{sec:system_model}.
+	\item Its task shares the same processor with other sensor tasks, requiring a scheduler to manage their execution.
 \end{itemize}
-%
 
-The code that reads and processes their data forms the sensor-based workload for our scheduling experiments.
+The code responsible for reading and processing sensor data forms the sensor-based workload used in our scheduling experiments.
 
 
 \begin{table}[H]
@@ -145,11 +146,13 @@ The code that reads and processes their data forms the sensor-based workload for
 
 \subsection{STM32 Project Structure}
 \label{sec:project_structure}
+To configure the hardware and develop software for the STM32 microcontroller, we use tools provided by STMicroelectronics.
 
-We use STM32CubeMX to configure the microcontroller pins and peripherals and generate a C project. We then use STM32CubeIDE to edit, build, and debug the code.
+The first tool is STM32CubeMX, which allows us to configure the microcontroller clock, pins, and peripherals, and generate a C project. Fig.~\ref{fig:stm32_project_structure} shows the structure of the generated project. The main file is \texttt{main.c}, which contains system initialization and the main application loop.
 
-Fig.~\ref{fig:stm32_project_structure} shows the main project components. Application source files are stored in \texttt{Core/Src}, while header files are stored in \texttt{Core/Inc}. The \texttt{main.c} file contains system initialization and the main loop that calls application functions.
+\todo{Remove example project tree?}
 
+After generating the project, we use STM32CubeIDE to write, build, and debug the application code. The generated source files contain special sections marked as \texttt{USER CODE}, where we can add our own logic. If we later change the hardware configuration and regenerate the project using STM32CubeMX, changes made outside these sections may be overwritten.
 
 
 \begin{figure}[t]
@@ -183,40 +186,18 @@ Fig.~\ref{fig:stm32_project_structure} shows the main project components. Applic
 
 \subsection{Default execution model}
 \label{sec:default_execution_model}
+% После кофгурации проекта ...какая-то свзяка... По стандарту на СТМ32 микроконтроллерах используется whileloop. Особенности вызова этого лупа зафикисрованы в листинге.... В данном примере используются: execute_taskA() и execute_taskB(), задача которых просто нагрузить процессор вычислениями.
 
-The generated \texttt{main()} function first initializes the system and peripherals, then enters an infinite \texttt{while (1)} loop (Listing~\ref{lst:stm32_main}). STM32CubeMX marks \texttt{USER CODE} regions where developers can add their own code without losing it when the project is generated again. By default, the loop contains no application functions.
+% Once the project is configured, we can add application logic to the \texttt{while(1)} loop in \texttt{main.c}. Functions called inside this loop execute repeatedly. For example, we can call \texttt{findAverage()} and \texttt{findMaximum()} to calculate the average and maximum values.
 
-\begin{lstlisting} [
-	style=ieeec,
-	float=t,
-	caption={Simplified STM32CubeMX-generated main function showing system initialization, user-code regions, and the infinite loop.},
-	label={lst:stm32_main}
-	]
-	int main(void) {
-		/* CubeMX-generated initialization */
-		MPU_Config();
-		HAL_Init();
-		SystemClock_Config();
-		MX_GPIO_Init();
-		/* Other peripheral initialization */
-		
-		/* USER CODE BEGIN 2 */
-		/* User-defined application setup */
-		/* USER CODE END 2 */
-		
-		/* USER CODE BEGIN WHILE */
-		while (1)
-		{
-			/* USER CODE END WHILE */
-			
-			/* USER CODE BEGIN 3 */
-			/* User-defined functions */
-		}
-		/* USER CODE END 3 */
-	}
-\end{lstlisting}
+After configuring the project, we can add application logic to the main \texttt{while(1)} loop in \texttt{main.c}. This loop is part of the default project structure generated by STM32CubeMX. Listing shows an example with two functions, \texttt{execute\_taskA()} and \texttt{execute\_taskB()}, which perform computations to generate CPU load.
 
-Application functions can be called from inside this loop. In a Superloop, these functions run in a fixed order, and the sequence repeats after the last function returns~\cite{KeilSuperLoop} (Fig.~\ref{fig:superloop_execution}). For example, \texttt{findMaximum()} runs only after \texttt{findAverage()} returns, so the execution time of one function affects when the next function can start.
+
+\todo{To think about adding listing with whileloop.}
+
+\todo{Rename functions (find average and maximum among what?)}
+
+Fig.~\ref{fig:superloop_execution} illustrates Superloop execution model. The functions within a loop execute sequentially in a fixed order. While \texttt{execute\_taskA()} is running, \texttt{execute\_taskB()} cannot start. Once both functions finish, the loop starts again. This process continues indefinitely unless the program is stopped.
 
 \begin{figure}[b]
 	\centering
@@ -228,6 +209,7 @@ Application functions can be called from inside this loop. In a Superloop, these
 
 \subsection{Application Workloads}
 \label{sec:application_workloads}
+\todo{Remove this subsection or update to AB suggestions}
 
 We consider two types of application tasks: synthetic computations and sensor readings. Synthetic tasks perform calculations without using external devices. Their execution time can be adjusted to create different CPU loads. This allows us to compare schedulers under controlled conditions.
 
