@@ -70,7 +70,7 @@ First, we compare Superloop and chunked EDF for periodic tasks with implicit dea
 
 \subsection{Paper organization}
 
-Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:project_structure}. Sections~\ref{sec:default_execution_model} and~\ref{sec:application_workloads} describe how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
+Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:stm32_software}. Sections~\ref{sec:default_execution_model} and~\ref{sec:application_workloads} describe how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
 
 
 
@@ -82,7 +82,7 @@ Initially, in Section~\ref{sec:STM32_background}, we provide the necessary backg
 \section{Background on STM32}
 \label{sec:STM32_background}
 
-Let us first provide the necessary preliminaries on the hardware components, which we later use in our evaluation for schedulers.
+Let us first provide the necessary preliminaries on the hardware and software components, which we later use in our evaluation for schedulers.
 
 \subsection{Hardware platform}
 \label{sec:hw_components}
@@ -144,15 +144,34 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 
 
 
-\subsection{STM32 Project Structure}
-\label{sec:project_structure}
-To configure the hardware and develop software for the STM32 microcontroller, we use tools provided by STMicroelectronics.
 
-The first tool is STM32CubeMX, which allows us to configure the microcontroller clock, pins, and peripherals, and generate a C project. Fig.~\ref{fig:stm32_project_structure} shows the structure of the generated project. The main file is \texttt{main.c}, which contains system initialization and the main application loop.
+\subsection{STM32 Software}
+\label{sec:stm32_software}
+
+To work with STM32 hardware, we use software tools developed by STMicroelectronics. These tools simplify the development process for STM32 microcontrollers.
+
+The first tool is STM32CubeMX. It allows us to:
+%
+\begin{itemize}
+	\item Configure the microcontroller clock.
+	\item Configure pins and peripherals.
+	\item Generate a C project with initialization code.
+\end{itemize}
+
+Fig.~\ref{fig:stm32_project_structure} shows an example of the generated project structure. One of the main files is \texttt{main.c}, which contains initialization code and special sections marked as \texttt{USER CODE}. These sections allow us to preserve our code during project regeneration. Changes made outside these sections may be overwritten.
 
 \todo{Remove example project tree?}
 
-After generating the project, we use STM32CubeIDE to write, build, and debug the application code. The generated source files contain special sections marked as \texttt{USER CODE}, where we can add our own logic. If we later change the hardware configuration and regenerate the project using STM32CubeMX, changes made outside these sections may be overwritten.
+After configuring and generating the project, we use STM32CubeIDE to:
+%
+\begin{itemize}
+	\item Write application code.
+	\item Build the project.
+	\item Debug the program on the microcontroller.
+\end{itemize}
+
+We will use this tools to implement algorithms described in Section~\ref{sec:schedulers}
+
 
 
 \begin{figure}[t]
@@ -186,11 +205,10 @@ After generating the project, we use STM32CubeIDE to write, build, and debug the
 
 \subsection{Default execution model}
 \label{sec:default_execution_model}
-% После кофгурации проекта ...какая-то свзяка... По стандарту на СТМ32 микроконтроллерах используется whileloop. Особенности вызова этого лупа зафикисрованы в листинге.... В данном примере используются: execute_taskA() и execute_taskB(), задача которых просто нагрузить процессор вычислениями.
+\todo{To think about paragraph structure}
+% По стандарту на микроконтроллерах СТМ32 используется whileloop. Этот луп  это часть стандартного сгенерированного STM32CubeMX проекта. Listing shows this whileloop with two functions, \texttt{execute\_taskA()} and \texttt{execute\_taskB()}. Задача функций - perform computations to generate CPU load.
 
-% Once the project is configured, we can add application logic to the \texttt{while(1)} loop in \texttt{main.c}. Functions called inside this loop execute repeatedly. For example, we can call \texttt{findAverage()} and \texttt{findMaximum()} to calculate the average and maximum values.
-
-After configuring the project, we can add application logic to the main \texttt{while(1)} loop in \texttt{main.c}. This loop is part of the default project structure generated by STM32CubeMX. Listing shows an example with two functions, \texttt{execute\_taskA()} and \texttt{execute\_taskB()}, which perform computations to generate CPU load.
+By default, STM32CubeMX generates a main \texttt{while(1)} loop in \texttt{main.c}. Listing~\ref{lst:superloop_example} shows this loop with two functions, \texttt{execute\_taskA()} and \texttt{execute\_taskB()}. Both functions perform computations to generate CPU load.
 
 
 \todo{To think about adding listing with whileloop.}
@@ -209,7 +227,7 @@ Fig.~\ref{fig:superloop_execution} illustrates Superloop execution model. The fu
 
 \subsection{Application Workloads}
 \label{sec:application_workloads}
-\todo{Remove this subsection or update to AB suggestions}
+\todo{Remove Application Workloads subsection or update to AB suggestions}
 
 We consider two types of application tasks: synthetic computations and sensor readings. Synthetic tasks perform calculations without using external devices. Their execution time can be adjusted to create different CPU loads. This allows us to compare schedulers under controlled conditions.
 
@@ -222,7 +240,7 @@ Sensor tasks read and process data from sensors connected to the STM32. Unlike s
 \section{System Model}
 \label{sec:system_model}
 
-We use the periodic task model of Liu and Layland~\cite{LiuLayland1973} and adapt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}. Table~\ref{tab:system_model} summarizes the notation.
+We use the periodic task model of Liu and Layland~\cite{LiuLayland1973}. We also adapt the task and release notation of Burmyakov and Bini~\cite{BurmyakovBini2026}. Table~\ref{tab:system_model} summarizes the notation.
 
 A real-time system $\mathcal{T}=\{\tau_1,\ldots,\tau_n\}$ consists of $n$ periodic tasks executed on one core ($m=1$). Each task $\tau_i=(C_i,D_i,P_i)$ is defined by the worst-case execution time $C_i$ of a job, a relative deadline $D_i$, and a period $P_i$. We consider implicit deadlines, $D_i=P_i$.
 
