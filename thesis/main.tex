@@ -57,12 +57,19 @@ STM32-based devices support applications such as environmental monitoring~\cite{
 The paper examines how the choice of scheduling approach affects responsiveness and processing cost on STM32. We compare two approaches: Superloop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
 
 \subsection{Related works}
-\begin{itemize}
-	\item Superloop in RTS.
-	\item EDF.
-	\item Chunked EDF.
-	\item Our evaluation.
-\end{itemize}
+Previous studies have examined cyclic and cooperative scheduling approaches for embedded systems. Koopman \cite{Koopman2021BetterEmbedded} describes pure static scheduling, where tasks execute sequentially in a fixed order within a main loop. This approach is simple to implement and provides predictable execution. However, long-running tasks can delay subsequent tasks and cause deadline misses. Locke \cite{Locke1992SoftwareArchitecture} compares cyclic executives with fixed-priority executives. His analysis highlights that modifying predefined cyclic schedules can be difficult when task requirements change. Unlike predefined cyclic schedules, the Superloop considered in this work checks the readiness of periodic tasks in a fixed order and executes them when they are ready.
+
+The limitations of cooperative scheduling have also been examined in practical applications. Jung et al. \cite{Jung2009HierarchicalPathPlanning} implemented a cooperative main loop for UAV control, where computationally intensive path-planning tasks were divided into smaller execution slices to meet the timing requirements of periodic control tasks. However, manually managing task execution times was complex, which motivated the use of a preemptive real-time kernel. Short \cite{Short2012TTCTTH} analyzed TTC and TTH schedulers and identified limitations in their scheduling overhead and schedulability. The proposed modifications reduced scheduling overhead and increased the proportion of schedulable task sets. Nevertheless, non-preemptive EDF achieved better schedulability in the evaluated scenarios.
+
+Liu and Layland \cite{LiuLayland1973} analyzed Earliest Deadline First (EDF) scheduling, which selects the ready job with the earliest absolute deadline. They proved that, for independent periodic tasks with deadlines equal to their periods, preemptive EDF can schedule a task set on a single processor if and only if its total utilization does not exceed 100\%. However, this theoretical result assumes unrestricted preemption and does not explicitly model preemption overhead.
+
+To reduce the costs of preemption, Bertogna and Baruah \cite{BertognaBaruah2010LimitedPreemption} proposed a limited-preemption EDF scheduler that delays preemptions when possible. Their simulations showed that, for task sets with ten tasks, the average number of preemptions was less than 20\% of that under fully preemptive EDF. Other studies have considered limiting preemption to specific points during task execution. Buttazzo et al. \cite{Buttazzo2013LimitedPreemptiveSurvey} reviewed several limited-preemption approaches, including fixed preemption points, where tasks are divided into non-preemptive chunks. Bertogna et al. \cite{Bertogna2010PreemptionPoints} proposed a method for placing these points to balance blocking time and preemption overhead. These studies demonstrate the importance of controlling when preemptions can occur, although their evaluations primarily rely on analytical models and simulations.
+
+Experimental studies have also evaluated scheduling approaches on resource-constrained embedded platforms. Baynes et al. \cite{Baynes2003PerformanceEnergy} compared a minimal multirate scheduler with cooperative and preemptive RTOSs using a processor simulator. Their results showed no clear advantage of either cooperative or preemptive scheduling in timing accuracy, while the minimal scheduler had lower energy overhead. Marau et al. \cite{Marau2008FlexibleControl} implemented a minimal real-time kernel on a PIC18 microcontroller and showed that EDF scheduling overhead increased with the number of simultaneously released tasks. Oliveira and Lima \cite{OliveiraLima2023SchedulingEnergy} evaluated two EDF implementations on an STM32F407 running FreeRTOS. Their experiments showed that the implementation of the ready queue significantly affected scheduling overhead and deadline misses.
+
+\todo{Superloop or cyclic scheduler?}
+
+However, the reviewed experiments do not directly compare Superloop and Chunked EDF within the same bare-metal implementation. This work addresses this gap by evaluating both approaches on an STM32F767 under different processor utilization levels and, for Chunked EDF, different maximum chunk durations $\Delta$, measuring response times, deadline misses and skipped releases.
 
 
 \subsection{Contribution}
@@ -481,6 +488,6 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 \label{sec:real_sensor_workload}
 
 \bibliographystyle{IEEEtran}
-\IEEEtriggeratref{5}
+\IEEEtriggeratref{11}
 \bibliography{references}
 \end{document}
