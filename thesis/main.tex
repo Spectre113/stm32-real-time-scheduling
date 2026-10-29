@@ -59,7 +59,8 @@ The paper examines how the choice of scheduling approach affects responsiveness 
 \subsection{Related works}
 \begin{itemize}
 	\item Superloop in RTS.
-	\item EDF and chunked EDF.
+	\item EDF.
+	\item Chunked EDF.
 	\item Our evaluation.
 \end{itemize}
 
@@ -207,7 +208,6 @@ We will use this tools to implement algorithms described in Section~\ref{sec:sch
 \subsection{Default execution model}
 \label{sec:default_execution_model}
 \todo{To think about paragraph structure}
-% По стандарту на микроконтроллерах СТМ32 используется whileloop. Этот луп  это часть стандартного сгенерированного STM32CubeMX проекта. Listing shows this whileloop with two functions, \texttt{execute\_taskA()} and \texttt{execute\_taskB()}. Задача функций - perform computations to generate CPU load.
 
 By default, STM32CubeMX generates a main \texttt{while(1)} loop in \texttt{main.c}. Listing~\ref{lst:superloop_example} shows this loop with two functions, \texttt{execute\_taskA()} and \texttt{execute\_taskB()}. Both functions perform computations to generate CPU load.
 
