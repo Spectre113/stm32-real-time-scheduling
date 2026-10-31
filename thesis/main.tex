@@ -38,7 +38,7 @@
 \raggedbottom
 \begin{document}
 
-\title{Real-Time Schedulers for STM32:\\Performance Evaluation of EDF over Superloop}
+\title{Experimental Evaluation of Chunked Fixed-Priority and EDF Scheduling on STM32}
 \author{
 	\IEEEauthorblockN{Vladimir Toporkov, Artem Burmyakov}
 	\IEEEauthorblockA{
@@ -49,6 +49,8 @@
 \listoftodos
 
 \section{Introduction}
+% 
+\todo{Intro: Real time systems, STM32, What this paper examines? example: AB 2015 article}
 
 STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
@@ -56,6 +58,7 @@ STM32-based devices support applications such as environmental monitoring~\cite{
 
 The paper examines how the choice of scheduling approach affects responsiveness and processing cost on STM32. We compare two approaches: Superloop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
 
+\todo{New structure of Related works: chunked FP, chunked EDF, Hardware}
 \subsection{Related works}
 Previous studies have examined cyclic and cooperative scheduling approaches for embedded systems. Koopman \cite{Koopman2021BetterEmbedded} describes pure static scheduling, where tasks execute sequentially in a fixed order within a main loop. This approach is simple to implement and provides predictable execution. However, long-running tasks can delay subsequent tasks and cause deadline misses. Locke \cite{Locke1992SoftwareArchitecture} compares cyclic executives with fixed-priority executives. His analysis highlights that modifying predefined cyclic schedules can be difficult when task requirements change. Unlike predefined cyclic schedules, the Superloop considered in this work checks the readiness of periodic tasks in a fixed order and executes them when they are ready.
 
@@ -66,8 +69,6 @@ Liu and Layland \cite{LiuLayland1973} analyzed Earliest Deadline First (EDF) sch
 To reduce the costs of preemption, Bertogna and Baruah \cite{BertognaBaruah2010LimitedPreemption} proposed a limited-preemption EDF scheduler that delays preemptions when possible. Their simulations showed that, for task sets with ten tasks, the average number of preemptions was less than 20\% of that under fully preemptive EDF. Other studies have considered limiting preemption to specific points during task execution. Buttazzo et al. \cite{Buttazzo2013LimitedPreemptiveSurvey} reviewed several limited-preemption approaches, including fixed preemption points, where tasks are divided into non-preemptive chunks. Bertogna et al. \cite{Bertogna2010PreemptionPoints} proposed a method for placing these points to balance blocking time and preemption overhead. These studies demonstrate the importance of controlling when preemptions can occur, although their evaluations primarily rely on analytical models and simulations. The Chunked EDF considered in this work follows a related principle by selecting the earliest-deadline job after each non-preemptive chunk.
 
 Experimental studies have also evaluated scheduling approaches on resource-constrained embedded platforms. Baynes et al. \cite{Baynes2003PerformanceEnergy} compared a minimal multirate scheduler with cooperative and preemptive RTOSs using a processor simulator. Their results showed no clear advantage of either cooperative or preemptive scheduling in timing accuracy, while the minimal scheduler had lower energy overhead. Marau et al. \cite{Marau2008FlexibleControl} implemented a minimal real-time kernel on a PIC18 microcontroller and showed that EDF scheduling overhead increased with the number of simultaneously released tasks. Oliveira and Lima \cite{OliveiraLima2023SchedulingEnergy} evaluated two EDF implementations on an STM32F407 running FreeRTOS. Their experiments showed that the implementation of the ready queue significantly affected scheduling overhead and deadline misses.
-
-\todo{Superloop or cyclic scheduler?}
 
 However, the reviewed experiments do not directly compare Superloop and Chunked EDF within the same bare-metal implementation. This work addresses this gap by evaluating both approaches on an STM32F767 under different processor utilization levels and, for Chunked EDF, different maximum chunk durations $\Delta$, measuring response times, deadline misses and skipped releases.
 
@@ -157,7 +158,7 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 \subsection{STM32 Software}
 \label{sec:stm32_software}
 
-To work with STM32 hardware, we use software tools developed by STMicroelectronics. These tools simplify the development process for STM32 microcontrollers.
+To work with STM32 hardware, we use specialized software tools developed by STMicroelectronics. These tools simplify the development process for STM32 microcontrollers.
 
 The first tool is STM32CubeMX. It allows us to:
 %
@@ -168,8 +169,6 @@ The first tool is STM32CubeMX. It allows us to:
 \end{itemize}
 
 Fig.~\ref{fig:stm32_project_structure} shows an example of the generated project structure. One of the main files is \texttt{main.c}, which contains initialization code and special sections marked as \texttt{USER CODE}. These sections allow us to preserve our code during project regeneration. Changes made outside these sections may be overwritten.
-
-\todo{Remove example project tree?}
 
 After configuring and generating the project, we use STM32CubeIDE to:
 %
@@ -225,21 +224,12 @@ By default, STM32CubeMX generates a main \texttt{while(1)} loop in \texttt{main.
 
 Fig.~\ref{fig:superloop_execution} illustrates Superloop execution model. The functions within a loop execute sequentially in a fixed order. While \texttt{execute\_taskA()} is running, \texttt{execute\_taskB()} cannot start. Once both functions finish, the loop starts again. This process continues indefinitely unless the program is stopped.
 
-\begin{figure}[b]
+\begin{figure}[H]
 	\centering
 	\includegraphics[width=1\columnwidth]{superloop_example.png}
 	\caption{Example of Superloop execution. Functions are executed sequentially in a fixed order, and the loop repeats indefinitely.}
 	\label{fig:superloop_execution}
 \end{figure}
-
-
-\subsection{Application Workloads}
-\label{sec:application_workloads}
-\todo{Remove Application Workloads subsection or update to AB suggestions}
-
-We consider two types of application tasks: synthetic computations and sensor readings. Synthetic tasks perform calculations without using external devices. Their execution time can be adjusted to create different CPU loads. This allows us to compare schedulers under controlled conditions.
-
-Sensor tasks read and process data from sensors connected to the STM32. Unlike synthetic tasks, they interact with real hardware. We use these tasks to evaluate the schedulers under real sensor workloads.
 
 
 
@@ -299,7 +289,7 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 
 
-
+\todo{Change Superloop to Fixed-Priority}
 \section{Superloop and EDF Schedulers}
 \label{sec:schedulers}
 
