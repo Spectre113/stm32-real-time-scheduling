@@ -137,6 +137,7 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 	\vspace{2pt}
 	\parbox{\columnwidth}{%
 		\footnotesize
+		Abbreviations:
 		GPIO - General-Purpose Input/Output;
 		SCCB - Serial Camera Control Bus;
 		ADC - Analog-to-Digital Converter.
@@ -247,6 +248,13 @@ Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superl
 
 \subsection{Application Workloads}
 \label{sec:workloads}
+
+\begin{figure*}[!b]
+	\centering
+	\includegraphics[width=0.94\textwidth]{hc-sr04_diagram.png}
+	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor emits an ultrasonic	pulse and detects its reflection. The width of the resulting ECHO pulse depends on the distance and is	measured by the microcontroller to calculate it. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
+	\label{fig:hcsr04_measurement}
+\end{figure*}
 
 
 
