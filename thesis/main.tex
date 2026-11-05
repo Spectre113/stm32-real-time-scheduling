@@ -81,7 +81,7 @@ First, we compare Superloop and chunked EDF for periodic tasks with implicit dea
 
 \subsection{Paper organization}
 
-Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:stm32_software}. Sections~\ref{sec:default_execution_model} and~\ref{sec:application_workloads} describe how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
+Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:stm32_software}. Sections~\ref{sec:default_execution_model} and~\ref{sec:workloads} describe how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
 
 
 
@@ -103,7 +103,7 @@ The central component of our hardware platform is the STM32F767 microcontroller,
 \begin{itemize}
 	\item It is a single-core microcontroller.
 	\item It uses an ARM Cortex-M7 processor core.
-	\item Its maximum clock frequency is 216 MHz.
+	\item Its clock frequency is 96 MHz.
 \end{itemize}
 
 To generate workloads for the STM32 microcontroller, we use several sensors, summarized in Table~\ref{tab:sensor_interfaces}. Each sensor has the following properties:
@@ -159,31 +159,46 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 \subsection{STM32 Software}
 \label{sec:stm32_software}
 
-To work with STM32 hardware, we use specialized software tools developed by STMicroelectronics. These tools simplify the development process for STM32 microcontrollers.
-
-The first tool is STM32CubeMX. It allows us to:
+%To work with STM32 hardware, we use specialized software tools developed by STMicroelectronics. These tools simplify the development process for STM32 microcontrollers.
 %
+%The first tool is STM32CubeMX. It allows us to:
+%%
+%\begin{itemize}
+%	\item Configure the microcontroller clock.
+%	\item Configure pins and peripherals.
+%	\item Generate a C project with initialization code.
+%\end{itemize}
+%
+%Fig.~\ref{fig:stm32_project_structure} shows an example of the generated project structure. One of the main files is \texttt{main.c}, which contains initialization code and special sections marked as \texttt{USER CODE}. These sections allow us to preserve our code during project regeneration. Changes made outside these sections may be overwritten.
+%
+%After configuring and generating the project, we use STM32CubeIDE to:
+%%
+%\begin{itemize}
+%	\item Write application code.
+%	\item Build the project.
+%	\item Debug the program on the microcontroller.
+%\end{itemize}
+
+% 
+
+To work with STM32 hardware, we use two tools provided by STMicroelectronics: STM32CubeMX and STM32CubeIDE. We use STM32CubeMX to:
 \begin{itemize}
 	\item Configure the microcontroller clock.
-	\item Configure pins and peripherals.
-	\item Generate a C project with initialization code.
+	\item Initialize peripherals and pins.
+	\item Generate a C project.
 \end{itemize}
-
-Fig.~\ref{fig:stm32_project_structure} shows an example of the generated project structure. One of the main files is \texttt{main.c}, which contains initialization code and special sections marked as \texttt{USER CODE}. These sections allow us to preserve our code during project regeneration. Changes made outside these sections may be overwritten.
-
-After configuring and generating the project, we use STM32CubeIDE to:
-%
+%We use STM32CubeIDE to implement, build and debug our project.
+We use STM32CubeIDE to:
 \begin{itemize}
 	\item Write application code.
 	\item Build the project.
-	\item Debug the program on the microcontroller.
+	\item Debug the program.
 \end{itemize}
 
-We will use this tools to implement algorithms described in Section~\ref{sec:schedulers}
+Fig.~\ref{fig:stm32_project_structure} shows the main components of the generated project. The file \texttt{main.c} contains initialization code and the main execution logic. It also contains sections marked as \texttt{USER CODE}. We place our application code in these sections to preserve it when the project is regenerated.
 
-
-\todo{Shrink the tree?}
-\begin{figure}[b]
+\todo{to show our structure or keep the default?}
+\begin{figure}[H]
 	\centering
 	\begin{minipage}{\columnwidth}
 		\footnotesize
@@ -202,9 +217,6 @@ We will use this tools to implement algorithms described in Section~\ref{sec:sch
 			.4 system\_stm32f7xx.c\DTcomment{Core init. and clock state}.
 			.3 Startup/\DTcomment{Startup code and interrupt vectors}.
 			.2 Drivers/\DTcomment{Hardware support}.
-			.3 CMSIS/\DTcomment{Core and MCU definitions}.
-			.2 STM32F767ZITX\_FLASH.ld.
-			.2 STM32F767ZITX\_RAM.ld.
 			.2 test\_project.ioc\DTcomment{CubeMX configuration}.
 		}
 	\end{minipage}
@@ -214,7 +226,7 @@ We will use this tools to implement algorithms described in Section~\ref{sec:sch
 
 \subsection{Default execution model}
 \label{sec:default_execution_model}
-After configuring the STM32F767 project in STM32CubeMX, a default Superloop is generated in \texttt{main.c}. It is an infinite \texttt{while(1)} loop and serves as the main execution loop of the project. The Superloop has the following characteristics:
+After configuring the STM32F767 project, a default Superloop is generated in \texttt{main.c}. It is an infinite \texttt{while(1)} loop and serves as the main execution loop of the project. The Superloop has the following characteristics:
 
 \begin{itemize}
 	\item Fixed execution order: functions are called sequentially in a predefined order.
@@ -231,9 +243,9 @@ Fig.~\ref{fig:superloop_execution} illustrates Superloop execution scenario. The
 	\label{fig:superloop_execution}
 \end{figure}
 
-Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superloop. However, the sensors listed in Table~\ref{tab:sensor_interfaces} have specific timing requirements. According to their documentation, sensor operations must be performed at certain time intervals. We discuss these requirements in the Subsection~\ref{sec:workloads}.
+Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superloop. However, the sensors listed in Table~\ref{tab:sensor_interfaces} have specific timing requirements. According to their documentation, sensor operations must be performed at certain time intervals. We discuss these requirements in Section~\ref{sec:workloads}.
 
-\subsection{Synthetic and sensor workloads}
+\subsection{Application Workloads}
 \label{sec:workloads}
 
 
@@ -416,13 +428,13 @@ For an active job, $d_i=r_i+D_i$, where $r_i$ is its saved release time. Otherwi
 		\Comment{At most $\Delta$}
 		
 		\If{\Call{Completed}{$i^\star$}}
-		\State $f\gets\textproc{Now}()$
+		\State $f_{i,j}\gets\textproc{Now}()$
 		\State $t_{i^\star}^{\mathsf{next}}
 		\gets t_{i^\star}^{\mathsf{next}}
 		+P_{i^\star}$
 		\Comment{Advance, then skip}
 		\State \textbf{while}
-		$t_{i^\star}^{\mathsf{next}}<f$
+		$t_{i^\star}^{\mathsf{next}}<f_{i,j}$
 		\textbf{do}
 		$t_{i^\star}^{\mathsf{next}}
 		\gets t_{i^\star}^{\mathsf{next}}
