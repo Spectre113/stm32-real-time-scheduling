@@ -251,7 +251,7 @@ Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superl
 
 \begin{figure*}[!b]
 	\centering
-	\includegraphics[width=0.93\textwidth]{hc-sr04_diagram.png}
+	\includegraphics[width=0.9\textwidth]{hc-sr04_diagram.png}
 	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor then emits an ultrasonic pulse and waits for its reflection. After a short sensor response delay, the ECHO signal goes HIGH and remains HIGH until the reflected wave is detected. The microcontroller measures the ECHO pulse width to calculate the distance. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
 	\label{fig:hcsr04_measurement}
 \end{figure*}
