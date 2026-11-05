@@ -79,7 +79,7 @@ However, the reviewed experiments do not directly compare Superloop and Chunked 
 
 
 \subsection{Contribution}
-First, we compare Superloop and chunked EDF for periodic tasks with implicit deadlines on an STM32F767 microcontroller. Then, we evaluate the effects of task-set utilization on response time, deadline misses, skipped releases, and measured task-selection overhead. Finally, we investigate how maximum chunk duration affects these metrics for chunked EDF. Both scheduler implementations are publicly available.
+First, we compare Superloop and chunked EDF for periodic tasks with implicit deadlines on an STM32F767 microcontroller. Then, we evaluate the effects of task-set utilization on response time, deadline misses, skipped releases, and measured task-selection overhead. Finally  , we investigate how maximum chunk duration affects these metrics for chunked EDF. Both scheduler implementations are publicly available.
 
 
 
@@ -256,7 +256,7 @@ Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superl
 \begin{figure*}[!b]
 	\centering
 	\includegraphics[width=0.9\textwidth]{hc-sr04_diagram.png}
-	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor then emits an ultrasonic pulse and waits for its reflection. After a short sensor response delay, the ECHO signal goes HIGH and remains HIGH until the reflected wave is detected. The microcontroller measures the ECHO pulse width to calculate the distance. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
+	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor then emits an ultrasonic pulse and waits for its reflection. After a short sensor delay ($\delta_s$), the ECHO signal goes HIGH and remains HIGH until the reflected wave is detected. The microcontroller measures the ECHO pulse width to calculate the distance. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
 	\label{fig:hcsr04_measurement}
 \end{figure*}
 
