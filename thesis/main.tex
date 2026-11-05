@@ -411,7 +411,7 @@ Unlike fully preemptive EDF, our chunked EDF implementation allows switching bet
 %
 \begin{itemize}
 	\item Earliest deadline first: the ready job with the earliest absolute deadline is selected.
-	\item Chunked execution: jobs run in non-preemptive steps. For computational workloads, each chunk lasts at most $\Delta$ ms.
+	\item Chunked execution: jobs run in non-preemptive steps. Each chunk lasts at most $\Delta$ ms.
 	\item Repeated selection: the scheduler selects a job after each execution step.
 \end{itemize}
 
