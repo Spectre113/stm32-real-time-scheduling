@@ -239,12 +239,12 @@ After configuring the STM32F767 project, a default Superloop is generated in \te
 	\item Repeated execution: once all functions have finished, the loop starts a new iteration.
 \end{itemize}
 
-Fig.~\ref{fig:superloop_execution} illustrates Superloop execution scenario. The example includes two functions: \texttt{execute\_taskA()} and \texttt{execute\_taskB()}. Both functions generate synthetic CPU load. Their execution times are 6 ms and 4 ms, respectively. The first function executes before the second one. Therefore, \texttt{execute\_taskB()} must wait until \texttt{execute\_taskA()} finishes. Each cycle takes 10 ms to be completed. The sequence repeats until the program is stopped.
+Fig.~\ref{fig:superloop_execution} illustrates Superloop execution scenario. The example includes two functions: \texttt{run\_taskA()} and \texttt{run\_taskB()}. Both functions generate synthetic CPU load. Their execution times are 6 ms and 4 ms, respectively. The first function executes before the second one. Therefore, \texttt{run\_taskB()} must wait until \texttt{run\_taskA()} finishes. Each cycle takes 10 ms to be completed. The sequence repeats until the program is stopped.
 
 \begin{figure}[H]
 	\centering
 	\includegraphics[width=1\columnwidth]{superloop_example.png}
-	\caption{Example of Superloop execution with two sequential functions.}
+	\caption{Example of Superloop execution with two sequential functions. Shaded intervals indicate function execution. Each loop iteration consists of \texttt{run\_taskA()} executing for 6 ms, followed by \texttt{run\_taskB()} for 4 ms, resulting in a total duration of 10 ms.}
 	\label{fig:superloop_execution}
 \end{figure}
 
