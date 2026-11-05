@@ -252,11 +252,22 @@ Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superl
 \begin{figure*}[!b]
 	\centering
 	\includegraphics[width=0.93\textwidth]{hc-sr04_diagram.png}
-	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor then emits an ultrasonic pulse and waits for its reflection. After a short sensor delay ($\delta$), the ECHO signal goes HIGH and remains HIGH until the reflected wave is detected. The microcontroller measures the ECHO pulse width to calculate the distance. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
+	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor then emits an ultrasonic pulse and waits for its reflection. After a short sensor response delay, the ECHO signal goes HIGH and remains HIGH until the reflected wave is detected. The microcontroller measures the ECHO pulse width to calculate the distance. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
 	\label{fig:hcsr04_measurement}
 \end{figure*}
 
+\todo{To think about paragraph structure}
 
+In our experiments, we use two types of workloads: synthetic and sensor-based. They have the following characteristics:
+%
+\begin{itemize}
+	\item Synthetic workloads generate processor load without interacting with external devices. Their execution duration can be configured to control the amount of work performed by the microcontroller.
+	\item Sensor-based workloads collect data from the sensors listed in Table~\ref{tab:sensor_interfaces}. Unlike synthetic workloads, they involve communication with external devices and must follow sensor-specific timing requirements.
+\end{itemize}
+
+As an example of a sensor-based workload, Fig.~\ref{fig:hcsr04_measurement} illustrates a distance measurement using the HC-SR04 sensor. The upper diagram shows the interaction between the STM32F767 and the sensor. The lower diagram shows the corresponding timing of the TRIG and ECHO signals.
+
+\todo{To think about transition b/w sections II and III}
 
 
 \section{System Model}
