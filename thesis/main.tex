@@ -46,11 +46,17 @@
 	}
 }
 \maketitle
-%\listoftodos
+\listoftodos
 
 \section{Introduction}
 % 
 \todo{Intro: Real time systems, STM32, What this paper examines? example structure: AB 2015 article}
+
+%The key property of a real-time system is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler is employed to allocate the available CPU time to pending tasks according to a set of rules.
+%
+%In practice, real-time systems often use microcontrollers. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications, maintaining responsiveness as the workload increases is a key challenge.
+% ...
+%In this paper, we compare Superloop with chunked EDF on an STM32F767 microcontroller.
 
 STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
 
@@ -72,8 +78,6 @@ To reduce the costs of preemption, Bertogna and Baruah \cite{BertognaBaruah2010L
 Experimental studies have also evaluated scheduling approaches on resource-constrained embedded platforms. Baynes et al. \cite{Baynes2003PerformanceEnergy} compared a minimal multirate scheduler with cooperative and preemptive RTOS using a processor simulator. Their results showed no clear advantage of either cooperative or preemptive scheduling in timing accuracy, while the minimal scheduler had lower energy overhead. Marau et al. \cite{Marau2008FlexibleControl} implemented a minimal real-time kernel on a PIC18 microcontroller and showed that EDF scheduling overhead increased with the number of simultaneously released tasks. Oliveira and Lima \cite{OliveiraLima2023SchedulingEnergy} evaluated two EDF implementations on an STM32F407 running FreeRTOS. Their experiments showed that the implementation of the ready queue significantly affected scheduling overhead and deadline misses.
 
 \todo{from EK: What should the reader conclude from this group of studies?}
-
-\todo{Garbage gap?}
 
 However, the reviewed experiments do not directly compare Superloop and Chunked EDF within the same bare-metal implementation. This work addresses this gap by evaluating both approaches on an STM32F767 under different processor utilization levels and, for Chunked EDF, different maximum chunk durations $\Delta$, measuring response times, deadline misses and skipped releases.
 
@@ -132,7 +136,7 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 		\textbf{Sensor} & \textbf{Purpose} & \textbf{Interface} \\
 		\hline
 		DHT11~\cite{DHT11Datasheet} & Temperature and humidity & Single-wire digital, GPIO \\
-		HC-SR04~\cite{HCSR04Datasheet} & Distance & Trigger/echo, GPIO \\
+		HC-SR04~\cite{HCSR04Datasheet} & Distance measurement & Trigger/echo, GPIO \\
 		OV2640~\cite{OV2640Datasheet} & Image acquisition & Parallel data, SCCB \\
 		SPW2430~\cite{SPW2430Datasheet} & Signal acquisition & Analog output, ADC \\
 		\hline
@@ -164,45 +168,35 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 \subsection{STM32 Software}
 \label{sec:stm32_software}
 
-%To work with STM32 hardware, we use specialized software tools developed by STMicroelectronics. These tools simplify the development process for STM32 microcontrollers.
-%
-%The first tool is STM32CubeMX. It allows us to:
-%%
-%\begin{itemize}
-%	\item Configure the microcontroller clock.
-%	\item Configure pins and peripherals.
-%	\item Generate a C project with initialization code.
-%\end{itemize}
-%
-%Fig.~\ref{fig:stm32_project_structure} shows an example of the generated project structure. One of the main files is \texttt{main.c}, which contains initialization code and special sections marked as \texttt{USER CODE}. These sections allow us to preserve our code during project regeneration. Changes made outside these sections may be overwritten.
-%
-%After configuring and generating the project, we use STM32CubeIDE to:
-%%
-%\begin{itemize}
-%	\item Write application code.
-%	\item Build the project.
-%	\item Debug the program on the microcontroller.
-%\end{itemize}
-
-% 
-
-To work with STM32 hardware, we use two tools provided by STMicroelectronics: STM32CubeMX and STM32CubeIDE. We use STM32CubeMX to:
+%We develop the so STM32F767 application using two tools provided by STMicroelectronics: STM32CubeMX and STM32CubeIDE. First, we use STM32CubeMX to:
+We develop software for the STM32F767 microcontroller using two tools provided by STMicroelectronics: STM32CubeMX and STM32CubeIDE. First, we use STM32CubeMX to:
 \begin{itemize}
 	\item Configure the microcontroller clock.
 	\item Initialize peripherals and pins.
 	\item Generate a C project.
 \end{itemize}
 %We use STM32CubeIDE to implement, build and debug our project.
-We use STM32CubeIDE to:
+Then, we use STM32CubeIDE to:
 \begin{itemize}
 	\item Write application code.
 	\item Build the project.
 	\item Debug the program.
 \end{itemize}
 
-Fig.~\ref{fig:stm32_project_structure} shows the main components of the generated project. The file \texttt{main.c} contains initialization code and the main execution logic. It also contains sections marked as \texttt{USER CODE}. We place our application code in these sections to preserve it when the project is regenerated.
+%Fig.~\ref{fig:stm32_project_structure} shows the main components of our project. The file \texttt{main.c} contains initialization code and the main execution logic. It also contains sections marked as \texttt{USER CODE}. We place our application code in these sections to preserve it when the project is regenerated.
 
-\todo{to show our structure or keep the default?}
+\todo{Expand the description?}
+
+Fig.~\ref{fig:stm32_project_structure} shows the main files and directories of our STM32F767 project. The \texttt{Core} directory contains header and source files organized into \texttt{Inc} and \texttt{Src}, respectively. The \texttt{Startup} directory contains the code required to start the microcontroller, while \texttt{Drivers} provides hardware support.
+
+Among the source files, \texttt{main.c} is the central file for our work. It has the following responsibilities:
+%
+\begin{itemize}
+	\item It contains the \texttt{main()} function, where program execution begins after startup.
+	\item It calls the functions that initialize the microcontroller clock and peripherals.
+	\item It contains the main execution loop, which organizes the execution of tasks.
+\end{itemize}
+
 \begin{figure}[H]
 	\centering
 	\begin{minipage}{\columnwidth}
@@ -212,7 +206,7 @@ Fig.~\ref{fig:stm32_project_structure} shows the main components of the generate
 		\DTsetlength{0.2em}{0.8em}{0.2em}{0.35pt}{1.2pt}
 		
 		\dirtree{%
-			.1 example\_project/.
+			.1 Schedulers\_Performance\_Evaluation/.
 			.2 Core/\DTcomment{Application code}.
 			.3 Inc/\DTcomment{Header files}.
 			.3 Src/\DTcomment{Source files}.
@@ -222,58 +216,67 @@ Fig.~\ref{fig:stm32_project_structure} shows the main components of the generate
 			.4 system\_stm32f7xx.c\DTcomment{Core init. and clock state}.
 			.3 Startup/\DTcomment{Startup code and interrupt vectors}.
 			.2 Drivers/\DTcomment{Hardware support}.
-			.2 test\_project.ioc\DTcomment{CubeMX configuration}.
 		}
 	\end{minipage}
-	\caption{Main components of the STM32CubeMX-generated project.}
+	\caption{Main files and directories of our STM32F767 project.}
 	\label{fig:stm32_project_structure}
 \end{figure}
 
+
+
 \subsection{Default execution model}
 \label{sec:default_execution_model}
-After configuring the STM32F767 project, a default Superloop is generated in \texttt{main.c}. It is an infinite \texttt{while(1)} loop and serves as the main execution loop of the project. The Superloop has the following characteristics:
+\todo{To write about such simple robotic systems?}
 
+By default, STM32CubeMX generates an infinite \texttt{while(1)} loop in \texttt{main.c}. It has the following properties:
+%
 \begin{itemize}
 	\item Fixed execution order: functions are called sequentially in a predefined order.
 	\item Non-preemptive execution: each function runs to completion before the next one starts.
 	\item Repeated execution: once all functions have finished, the loop starts a new iteration.
 \end{itemize}
 
-Fig.~\ref{fig:superloop_execution} illustrates Superloop execution scenario. The example includes two functions: \texttt{run\_taskA()} and \texttt{run\_taskB()}. Both functions generate synthetic CPU load. Their execution times are 6 ms and 4 ms, respectively. The first function executes before the second one. Therefore, \texttt{run\_taskB()} must wait until \texttt{run\_taskA()} finishes. Each cycle takes 10 ms to be completed. The sequence repeats until the program is stopped.
+Fig.~\ref{fig:while_loop_execution} illustrates the execution of such a loop with two functions: \texttt{run\_taskA()} and \texttt{run\_taskB()}. Both functions generate CPU load, with execution times of 6 ms and 4 ms, respectively. Since \texttt{run\_taskA()} executes first, \texttt{run\_taskB()} must wait until it finishes. Each loop iteration takes 10 ms, after which the sequence repeats.
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=1\columnwidth]{superloop_example.png}
-	\caption{Example of Superloop execution with two sequential functions. Shaded intervals indicate function execution. Each loop iteration consists of \texttt{run\_taskA()} executing for 6 ms, followed by \texttt{run\_taskB()} for 4 ms, resulting in a total duration of 10 ms.}
-	\label{fig:superloop_execution}
+	\includegraphics[width=\columnwidth]{while_loop_example.png}
+	\caption{Example of while loop execution with two sequential functions. Shaded intervals indicate function execution. Each loop iteration consists of \texttt{run\_taskA()} executing for 6 ms, followed by \texttt{run\_taskB()} for 4 ms, resulting in a total duration of 10 ms.}
+	\label{fig:while_loop_execution}
 \end{figure}
 
-Fig.~\ref{fig:superloop_execution} shows the basic execution principle of Superloop. However, the sensors listed in Table~\ref{tab:sensor_interfaces} have specific timing requirements. According to their documentation, sensor operations must be performed at certain time intervals. We discuss these requirements in Section~\ref{sec:workloads}.
+In our project, we use the \texttt{while(1)} loop as the basis for implementing our schedulers, which are described in Section~\ref{sec:schedulers}. Unlike the simple example in Fig.~\ref{fig:while_loop_execution}, the sensor-based tasks in our system must satisfy the timing requirements of the sensors listed in Table~\ref{tab:sensor_interfaces}. We describe these tasks and their timing requirements in Section~\ref{sec:workloads}.
 
-\subsection{Application Workloads}
+\section{Experimental System for Schedulers Evaluation}
 \label{sec:workloads}
 
-\begin{figure*}[!b]
-	\centering
-	\includegraphics[width=0.9\textwidth]{hc-sr04_diagram.png}
-	\caption{HC-SR04 distance measurement using STM32F767. The microcontroller initiates a measurement with a 10-$\mu$s TRIG pulse. The sensor then emits an ultrasonic pulse and waits for its reflection. After a short sensor delay ($\delta_s$), the ECHO signal goes HIGH and remains HIGH until the reflected wave is detected. The microcontroller measures the ECHO pulse width to calculate the distance. The illustrated ECHO duration of 23 ms is an example; the timing diagram is not to scale.}
-	\label{fig:hcsr04_measurement}
-\end{figure*}
+Our experimental system consists of four tasks executed on the STM32F767 microcontroller:
 
-\todo{To think about paragraph structure}
-
-In our experiments, we use two types of workloads: synthetic and sensor-based. They have the following characteristics:
+\todo{to keep or delete the enum or to make a reference to Table?}
 %
-\begin{itemize}
-	\item Synthetic workloads generate processor load without interacting with external devices. Their execution duration can be configured to control the amount of work performed by the microcontroller.
-	\item Sensor-based workloads collect data from the sensors listed in Table~\ref{tab:sensor_interfaces}. Unlike synthetic workloads, they involve communication with external devices and must follow sensor-specific timing requirements.
-\end{itemize}
+\begin{enumerate}
+	\item Distance measurement using the HC-SR04 ultrasonic sensor.
+	\item Temperature and humidity measurement using the DHT11 sensor.
+	\item Image acquisition and processing using the OV2640 camera.
+	\item Audio signal acquisition using the SPW2430 microphone.
+\end{enumerate}
 
-As an example of a sensor-based workload, Fig.~\ref{fig:hcsr04_measurement} illustrates a distance measurement using the HC-SR04 sensor. The upper diagram shows the interaction between the STM32F767 and the sensor. The lower diagram shows the corresponding timing of the TRIG and ECHO signals.
+Now we describe each sensor in more details.
 
-\todo{To think about transition b/w sections II and III}
+\subsection{Task 1: distance measurement by an ultrasonic sensor}
+\todo{to describe ultrasonic sensor more accurate}
+
+Distance measurement is a frequently occurring task in robotic systems. By using an ultrasonic sensor, the central microcontroller periodically computes the distance to obstacles by relying on ECHO signals measured by this sensor. Despite this task to be simple, it allows us to illustrate the entire processing sequence between sensor and microcontroller.
 
 
+
+\subsection{Task 2: Temperature and humidity measurement by a DHT11 sensor}
+\todo{To write about task 2}
+
+
+\todo{To add HW picture (to each or only one general?)}
+
+\todo{To add pictures about SW: tasks?, time diagrams?, FSM?}
 \section{System Model}
 \label{sec:system_model}
 
