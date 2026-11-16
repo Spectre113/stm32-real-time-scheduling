@@ -49,23 +49,21 @@
 \listoftodos
 
 \section{Introduction}
-% 
-\todo{Intro: Real time systems, STM32, What this paper examines? example structure: AB 2015 article}
 
-%The key property of a real-time system is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler is employed to allocate the available CPU time to pending tasks according to a set of rules.
-%
-%In practice, real-time systems often use microcontrollers. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications, maintaining responsiveness as the workload increases is a key challenge.
-% ...
 %In this paper, we compare Superloop with chunked EDF on an STM32F767 microcontroller.
 
-STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
+%STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
+%
+%STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness as the workload increases is a key challenge.
 
-STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness as the workload increases is a key challenge.
+The key property of a real-time system is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler is employed to allocate the available CPU time to pending tasks according to a set of rules.
 
-The paper examines how the choice of scheduling approach affects responsiveness and processing cost on STM32. We compare two approaches: Superloop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
+In practice, real-time systems often use microcontrollers. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications, maintaining responsiveness as the workload increases is a key challenge. When multiple tasks share the same processor, their execution order affects how quickly they can complete.
+
+The paper examines how the choice of scheduler affects responsiveness and scheduling overhead on STM32. We compare two schedulers: Superloop~\cite{KeilSuperLoop} and chunked Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
+
 
 \subsection{Related works}
-\todo{Update literature review. Find more relevant articles}
 
 Previous studies have examined cyclic and cooperative scheduling approaches for embedded systems. Koopman \cite{Koopman2021BetterEmbedded} describes pure static scheduling, where tasks execute sequentially in a fixed order within a main loop. This approach is simple to implement and provides predictable execution. However, long-running tasks can delay subsequent tasks and cause deadline misses. Locke \cite{Locke1992SoftwareArchitecture} compares cyclic executives with fixed-priority executives. His analysis highlights that modifying predefined cyclic schedules can be difficult when task requirements change. Unlike predefined cyclic schedules, the Superloop considered in this work checks the readiness of periodic tasks in a fixed order and executes them when they are ready.
 
@@ -77,9 +75,10 @@ To reduce the costs of preemption, Bertogna and Baruah \cite{BertognaBaruah2010L
 
 Experimental studies have also evaluated scheduling approaches on resource-constrained embedded platforms. Baynes et al. \cite{Baynes2003PerformanceEnergy} compared a minimal multirate scheduler with cooperative and preemptive RTOS using a processor simulator. Their results showed no clear advantage of either cooperative or preemptive scheduling in timing accuracy, while the minimal scheduler had lower energy overhead. Marau et al. \cite{Marau2008FlexibleControl} implemented a minimal real-time kernel on a PIC18 microcontroller and showed that EDF scheduling overhead increased with the number of simultaneously released tasks. Oliveira and Lima \cite{OliveiraLima2023SchedulingEnergy} evaluated two EDF implementations on an STM32F407 running FreeRTOS. Their experiments showed that the implementation of the ready queue significantly affected scheduling overhead and deadline misses.
 
-\todo{from EK: What should the reader conclude from this group of studies?}
+These studies show that the performance of embedded schedulers depends not only on the scheduling algorithm, but also on its implementation and the workload. In particular, the number of ready tasks and the organization of the ready queue can affect scheduling overhead and task timing.
 
-However, the reviewed experiments do not directly compare Superloop and Chunked EDF within the same bare-metal implementation. This work addresses this gap by evaluating both approaches on an STM32F767 under different processor utilization levels and, for Chunked EDF, different maximum chunk durations $\Delta$, measuring response times, deadline misses and skipped releases.
+However, the reviewed experiments do not directly compare Superloop and Chunked EDF within the same bare-metal implementation. This work addresses this gap by evaluating both approaches on an STM32F767 under different processor utilization levels and, for Chunked EDF, different maximum chunk durations, measuring response times, deadline misses and skipped releases.
+
 
 
 \subsection{Contribution}
