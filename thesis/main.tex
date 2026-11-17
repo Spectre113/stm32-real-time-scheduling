@@ -58,7 +58,7 @@
 
 The key property of a real-time system is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler is employed to allocate the available CPU time to pending tasks according to a set of rules.
 
-In practice, real-time systems often use microcontrollers. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications, maintaining responsiveness as the workload increases is a key challenge. When multiple tasks share the same processor, their execution order affects how quickly they can complete.
+In practice, real-time systems often use microcontrollers. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness while the workload increases is a key challenge. When multiple tasks are ready to run, the uniprocessor can execute only one at a time. A scheduling rule determines which task runs next.
 
 The paper examines how the choice of scheduler affects responsiveness and scheduling overhead on STM32. We compare two schedulers: Superloop~\cite{KeilSuperLoop} and chunked Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
 
@@ -223,16 +223,21 @@ Among the source files, \texttt{main.c} is the central file for our work. It has
 
 
 
+
+
+
 \subsection{Default execution model}
 \label{sec:default_execution_model}
 \todo{To expand first paragraph?}
 
-By default, STM32CubeMX generates an infinite \texttt{while(1)} loop in \texttt{main.c}. It has the following properties:
+Initially, STM32CubeMX generates an infinite \texttt{while(1)} loop in \texttt{main.c}. This loop has the following properties:
+
+\todo{functions or tasks?}
 %
 \begin{itemize}
-	\item Fixed execution order: functions are called sequentially in a predefined order.
-	\item Non-preemptive execution: each function runs to completion before the next one starts.
-	\item Repeated execution: once all functions have finished, the loop starts a new iteration.
+	\item Fixed execution order: tasks are called sequentially in a predefined order.
+	\item Non-preemptive execution: each tasks runs to completion before the next one starts.
+	\item Repeated execution: once all tasks have finished, the loop starts a new iteration.
 \end{itemize}
 
 Fig.~\ref{fig:while_loop_execution} illustrates the execution of such a loop with two functions: \texttt{run\_taskA()} and \texttt{run\_taskB()}. Both functions generate CPU load, with execution times of 6 ms and 4 ms, respectively. Since \texttt{run\_taskA()} executes first, \texttt{run\_taskB()} must wait until it finishes. Each loop iteration takes 10 ms, after which the sequence repeats.
@@ -247,12 +252,21 @@ Fig.~\ref{fig:while_loop_execution} illustrates the execution of such a loop wit
 
 In our project, we use the \texttt{while(1)} loop as the basis for implementing the schedulers, which are described in Section~\ref{sec:schedulers}. Unlike the simple example in Fig.~\ref{fig:while_loop_execution}, the sensor-based tasks in our system must satisfy the timing requirements of the sensors listed in Table~\ref{tab:sensor_interfaces}. We describe these tasks and their timing requirements in Section~\ref{sec:workloads}.
 
+
+
+
+
+
+
+
+
+
+
 \section{Experimental System for Schedulers Evaluation}
 \label{sec:workloads}
 
 Our experimental system consists of four tasks executed on the STM32F767 microcontroller:
 
-\todo{to keep or delete the enum or to make a reference to Table?}
 %
 \begin{enumerate}
 	\item Distance measurement using the HC-SR04 ultrasonic sensor.
@@ -267,16 +281,30 @@ Now we describe each sensor in more details.
 \todo{Is it a guide? Is here a tautology?}
 %Distance measurement is a frequently occurring task in robotic systems. By using an ultrasonic sensor, the central microcontroller periodically computes the distance to obstacles by relying on ECHO signals measured by this sensor. Despite this task to be simple, it allows us to illustrate the entire processing sequence between sensor and microcontroller.
 
-Distance measurement is a common task in robotic systems. To perform this task, we use the HC-SR04 ultrasonic sensor connected to the STM32F767 microcontroller. The measurement process relies on two signals: TRIG and ECHO. First, the microcontroller sends a TRIG signal to activate the sensor. The sensor then emits an ultrasonic pulse and waits for its reflection from the object. In response, the sensor generates an ECHO signal. The microcontroller measures the duration of this signal and uses it to calculate the distance to the object. Although this task is simple, it allows us to illustrate the entire processing sequence between the sensor and the microcontroller.
+Distance measurement is a common task in robotic systems. To perform this task, we use the HC-SR04 ultrasonic sensor connected to the STM32F767 microcontroller. The measurement process relies on two signals: TRIG and ECHO. First, the microcontroller sends a TRIG signal to activate the sensor. The sensor then emits an ultrasonic pulse and waits for its reflection from the object. Next, the sensor generates an ECHO signal. Finally, the microcontroller measures the duration of this signal and uses it to calculate the distance to the object. Despite this task to be simple, it allows us to illustrate the entire processing sequence between the sensor and the microcontroller.
 
+The overview of hardware components for such a task is depicted in Fig.~\ref{fig:hc-sr04_hw}. We identify several major components:
+\begin{itemize}
+	\item The STM32F767 microcontroller.
+	\item The HC-SR04 ultrasonic sensor.
+	\item The two wires used to transmit the TRIG and ECHO signals between the microcontroller and the sensor.
+\end{itemize}
 
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\columnwidth]{hc-sr04_hw.png}
+	\caption{Distance measurement with the HC-SR04 ultrasonic sensor.}
+	\label{fig:hc-sr04_hw}
+\end{figure}
 
 
 
 
 
 \subsection{Task 2: Temperature and humidity measurement by a DHT11 sensor}
-Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. The sensor measures the surrounding temperature and humidity. To obtain these measurements, the microcontroller first sends a start signal to the sensor. In response, the sensor transmits 40 bits containing the measured values. Each bit is represented by a pulse, whose duration determines whether the bit is 0 or 1. The microcontroller reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
+Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. The sensor measures the surrounding temperature and humidity. To obtain these measurements, the microcontroller first emits a start signal to the sensor. After that, the sensor sends the measured values as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. 
+% After that, the sensor transmits 40 bits containing the measured values. Each bit is represented by a pulse, whose duration determines whether the bit is 0 or 1. 
+The microcontroller reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
 
 
 
