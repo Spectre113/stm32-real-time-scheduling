@@ -281,7 +281,9 @@ Now we describe each sensor in more details.
 \todo{Is it a guide? Is here a tautology?}
 %Distance measurement is a frequently occurring task in robotic systems. By using an ultrasonic sensor, the central microcontroller periodically computes the distance to obstacles by relying on ECHO signals measured by this sensor. Despite this task to be simple, it allows us to illustrate the entire processing sequence between sensor and microcontroller.
 
-Distance measurement is a common task in robotic systems. To perform this task, we use the HC-SR04 ultrasonic sensor connected to the STM32F767 microcontroller. The measurement process relies on two signals: TRIG and ECHO. First, the microcontroller sends a TRIG signal to activate the sensor. The sensor then emits an ultrasonic pulse and waits for its reflection from the object. Next, the sensor generates an ECHO signal. Finally, the microcontroller measures the duration of this signal and uses it to calculate the distance to the object. Despite this task to be simple, it allows us to illustrate the entire processing sequence between the sensor and the microcontroller.
+Distance measurement is a common task in robotic systems. To perform this task, we use the HC-SR04 ultrasonic sensor connected to the STM32F767 microcontroller. The measurement process relies on two signals: TRIG and ECHO. First, the microcontroller sends a TRIG signal to activate the sensor. The sensor then emits an ultrasonic pulse and waits for its reflection from the object. Next, the sensor generates an ECHO signal. Finally, the microcontroller measures the duration of this signal and uses it to calculate the distance to the object. 
+
+Despite the distance measurement task to be simple, it allows us to illustrate the entire processing sequence between the sensor and the microcontroller.
 
 The overview of hardware components for such a task is depicted in Fig.~\ref{fig:hc-sr04_hw}. We identify several major components:
 \begin{itemize}
@@ -302,7 +304,7 @@ The overview of hardware components for such a task is depicted in Fig.~\ref{fig
 
 
 \subsection{Task 2: Temperature and humidity measurement by a DHT11 sensor}
-Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. The sensor measures the surrounding temperature and humidity. To obtain these measurements, the microcontroller first emits a start signal to the sensor. After that, the sensor sends the measured values as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. 
+Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. The sensor measures the surrounding temperature and humidity. To obtain these measurements, the microcontroller first emits a start signal to the sensor. After that, the sensor measures the temperature and humidity. It then sends the results as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. 
 % After that, the sensor transmits 40 bits containing the measured values. Each bit is represented by a pulse, whose duration determines whether the bit is 0 or 1. 
 The microcontroller reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
 
