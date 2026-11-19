@@ -304,9 +304,16 @@ The overview of hardware components for such a task is depicted in Fig.~\ref{fig
 
 
 \subsection{Task 2: Temperature and humidity measurement by a DHT11 sensor}
-Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. The sensor measures the surrounding temperature and humidity. To obtain these measurements, the microcontroller first emits a start signal to the sensor. After that, the sensor measures the temperature and humidity. It then sends the results as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. 
-% After that, the sensor transmits 40 bits containing the measured values. Each bit is represented by a pulse, whose duration determines whether the bit is 0 or 1. 
-The microcontroller reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
+Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. Fig.~\ref{fig:dht11_hw} shows the sensor's main components and its connection to the microcontroller.
+
+To obtain the measurements, the STM32F767 sends a start signal over the DATA connection to the internal 8-bit microcontroller of the DHT11. This internal microcontroller uses the two sensing elements to measure temperature and humidity. It sends a start signal to the two sensing elements. It then reads their signals and converts them into temperature and humidity values. Finally, it sends the results back to the STM32F767 as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. The STM32F767 reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.65\columnwidth]{dht11_hw.png}
+	\caption{Functional diagram of the DHT11 sensor and its connection to the STM32F767 microcontroller.}
+	\label{fig:dht11_hw}
+\end{figure}
 
 
 
