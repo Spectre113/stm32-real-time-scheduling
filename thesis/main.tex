@@ -49,11 +49,13 @@
 \listoftodos
 
 \section{Introduction}
-The key property of a real-time system (RTS) is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler in RTS is employed to allocate the available CPU time to pending tasks according to a set of rules. Relevant examples of such schedulers are Earliest Deadline First (EDF)~\cite{LiuLayland1973} and Superloop~\cite{KeilSuperLoop}.
+The key property of a real-time system (RTS) is time predictability. Operations in such a system must be performed within strictly defined deadlines~\cite{LiuLayland1973}.
 
-In practice, real-time systems often use microcontrollers. A microcontroller integrates one or more CPU cores, memory, and peripheral interfaces. These interfaces allow it to communicate with external devices, such as sensors. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these examples or applications \todo{to think about this sentence} maintaining responsiveness while the workload increases is a key challenge. When multiple tasks are ready to run, the uniprocessor can execute only one at a time. A scheduling rule determines which task runs next.
+In practice, real-time systems often use microcontrollers. A microcontroller integrates one or more CPU cores, memory, and peripheral interfaces for connecting external sensor devices. In our work we use an STM32-based single-core microcontroller and compatible sensor devices~\cite{STM32EnvironmentMonitoring, STM32ConditionMonitoring}. A high-level overview of our hardware system is depicted in Figure~\ref{fig:stm32_hw}, with more details provided later in Section~\ref{sec:hw_components}.
 
-The paper examines how the choice of scheduler affects responsiveness and scheduling overhead on STM32. We compare two schedulers: Superloop and chunked Earliest Deadline First.
+During a system execution, various sensors generate jobs to be processed by a CPU core. Thus, a scheduler is employed to allocate that available core to pending jobs according to a set of rules, aiming at meeting jobs' deadlines. Relevant examples of such schedulers are Superloop~\cite{KeilSuperLoop} and Earliest Deadline First (EDF)~\cite{LiuLayland1973}. We note that these schedulers provide different scheduling efficiency. On one side, Superloop is very simple to be implemented, but may fail to meet jobs' deadlines. On another side, EDF is proved to be a theoretically optimal single-core scheduler~\cite{LiuLayland1973}, which however is harder to be implemented, as well as causes more significant scheduling overheads.
+
+In these project we implement both schedulers, Superloop and EDF\footnote{More precisely, its chunked version}, and thoroughly examine their scheduling performance on a realistic STM32-based real-time system.
 
 
 \subsection{Related works}
