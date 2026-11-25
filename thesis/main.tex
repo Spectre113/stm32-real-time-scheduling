@@ -38,7 +38,7 @@
 \raggedbottom
 \begin{document}
 
-\title{Real-Time Schedulers for STM32:\\Performance Evaluation of EDF over Superloop}
+\title{Performance Evaluation of EDF and Superloop\\Real-Time Schedulers for STM32 Microcontroller Systems}
 \author{
 	\IEEEauthorblockN{Vladimir Toporkov, Artem Burmyakov}
 	\IEEEauthorblockA{
@@ -49,46 +49,26 @@
 \listoftodos
 
 \section{Introduction}
+The key property of a real-time system (RTS) is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler in RTS is employed to allocate the available CPU time to pending tasks according to a set of rules. Relevant examples of such schedulers are Earliest Deadline First (EDF)~\cite{LiuLayland1973} and Superloop~\cite{KeilSuperLoop}.
 
-%In this paper, we compare Superloop with chunked EDF on an STM32F767 microcontroller.
+In practice, real-time systems often use microcontrollers. A microcontroller integrates one or more CPU cores, memory, and peripheral interfaces. These interfaces allow it to communicate with external devices, such as sensors. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these examples or applications \todo{to think about this sentence} maintaining responsiveness while the workload increases is a key challenge. When multiple tasks are ready to run, the uniprocessor can execute only one at a time. A scheduling rule determines which task runs next.
 
-%STM32 is a family of microcontrollers developed by STMicroelectronics for embedded applications. These devices integrate a processor, memory, and peripheral interfaces on a single chip~\cite{STM32F767Datasheet}.
-%
-%STM32-based devices support applications such as environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness as the workload increases is a key challenge.
-
-The key property of a real-time system is time predictability. Operations in such a system must be performed within a strictly defined time. A scheduler is employed to allocate the available CPU time to pending tasks according to a set of rules.
-
-In practice, real-time systems often use microcontrollers. For example, STM32-based devices support environmental monitoring~\cite{STM32EnvironmentMonitoring} and equipment condition monitoring~\cite{STM32ConditionMonitoring}. In these applications maintaining responsiveness while the workload increases is a key challenge. When multiple tasks are ready to run, the uniprocessor can execute only one at a time. A scheduling rule determines which task runs next.
-
-The paper examines how the choice of scheduler affects responsiveness and scheduling overhead on STM32. We compare two schedulers: Superloop~\cite{KeilSuperLoop} and chunked Earliest Deadline First (EDF)~\cite{LiuLayland1973}.
+The paper examines how the choice of scheduler affects responsiveness and scheduling overhead on STM32. We compare two schedulers: Superloop and chunked Earliest Deadline First.
 
 
 \subsection{Related works}
-
-Previous studies have examined cyclic and cooperative scheduling approaches for embedded systems. Koopman \cite{Koopman2021BetterEmbedded} describes pure static scheduling, where tasks execute sequentially in a fixed order within a main loop. This approach is simple to implement and provides predictable execution. However, long-running tasks can delay subsequent tasks and cause deadline misses. Locke \cite{Locke1992SoftwareArchitecture} compares cyclic executives with fixed-priority executives. His analysis highlights that modifying predefined cyclic schedules can be difficult when task requirements change. Unlike predefined cyclic schedules, the Superloop considered in this work checks the readiness of periodic tasks in a fixed order and executes them when they are ready.
-
-The limitations of cooperative scheduling have also been examined in practical applications. Jung et al. \cite{Jung2009HierarchicalPathPlanning} implemented a cooperative main loop for UAV control, where computationally intensive path-planning tasks were divided into smaller execution slices to meet the timing requirements of periodic control tasks. However, manually managing task execution times was complex, which motivated the use of a preemptive real-time kernel. Short \cite{Short2012TTCTTH} analyzed TTC and TTH schedulers and identified limitations in their scheduling overhead and schedulability. The proposed modifications reduced scheduling overhead and increased the proportion of schedulable task sets. Nevertheless, non-preemptive EDF achieved better schedulability in the evaluated scenarios.
-
-Liu and Layland \cite{LiuLayland1973} analyzed Earliest Deadline First (EDF) scheduling, which selects the ready job with the earliest absolute deadline. They proved that, for independent periodic tasks with deadlines equal to their periods, preemptive EDF can schedule a task set on a single processor if and only if its total utilization does not exceed 100\%. However, this theoretical result assumes unrestricted preemption and does not explicitly model preemption overhead.
-
-To reduce the costs of preemption, Bertogna and Baruah \cite{BertognaBaruah2010LimitedPreemption} proposed a limited-preemption EDF scheduler that delays preemptions when possible. Their simulations showed that, for task sets with ten tasks, the average number of preemptions was less than 20\% of that under fully preemptive EDF. Other studies have considered limiting preemption to specific points during task execution. Buttazzo et al. \cite{Buttazzo2013LimitedPreemptiveSurvey} reviewed several limited-preemption approaches, including fixed preemption points, where tasks are divided into non-preemptive chunks. Bertogna et al. \cite{Bertogna2010PreemptionPoints} proposed a method for placing these points to balance blocking time and preemption overhead. These studies demonstrate the importance of controlling when preemptions can occur, although their evaluations primarily rely on analytical models and simulations. The Chunked EDF considered in this work follows a related principle by selecting the earliest-deadline job after each non-preemptive chunk.
-
-Experimental studies have also evaluated scheduling approaches on resource-constrained embedded platforms. Baynes et al. \cite{Baynes2003PerformanceEnergy} compared a minimal multirate scheduler with cooperative and preemptive RTOS using a processor simulator. Their results showed no clear advantage of either cooperative or preemptive scheduling in timing accuracy, while the minimal scheduler had lower energy overhead. Marau et al. \cite{Marau2008FlexibleControl} implemented a minimal real-time kernel on a PIC18 microcontroller and showed that EDF scheduling overhead increased with the number of simultaneously released tasks. Oliveira and Lima \cite{OliveiraLima2023SchedulingEnergy} evaluated two EDF implementations on an STM32F407 running FreeRTOS. Their experiments showed that the implementation of the ready queue significantly affected scheduling overhead and deadline misses.
-
-These studies show that the performance of embedded schedulers depends not only on the scheduling algorithm, but also on its implementation and the workload. In particular, the number of ready tasks and the organization of the ready queue can affect scheduling overhead and task timing.
-
-However, the reviewed experiments do not directly compare Superloop and Chunked EDF within the same bare-metal implementation. This work addresses this gap by evaluating both approaches on an STM32F767 under different processor utilization levels and, for Chunked EDF, different maximum chunk durations, measuring response times, deadline misses and skipped releases.
+\todo{find key articles (Koopman, Buttazzo?), to describe each aspect in more details}
 
 
 
 \subsection{Contribution}
-First, we compare Superloop and chunked EDF for periodic tasks with implicit deadlines on an STM32F767 microcontroller. Then, we evaluate the effects of task-set utilization on response time, deadline misses, skipped releases, and measured task-selection overhead. Finally  , we investigate how maximum chunk duration affects these metrics for chunked EDF. Both scheduler implementations are publicly available.
+First, we compare Superloop and chunked EDF for periodic tasks with implicit deadlines on an STM32F767 microcontroller. Then, we evaluate the effects of task-set utilization on response time, deadline misses, skipped releases, and measured task-selection overhead. Finally, we investigate how maximum chunk duration affects these metrics for chunked EDF. Both scheduler implementations are publicly available.
 
 
 
 \subsection{Paper organization}
 
-Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:stm32_software}. Sections~\ref{sec:default_execution_model} and~\ref{sec:workloads} describe how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
+Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:stm32_software}. Sections~\ref{sec:default_execution_model} and~\ref{sec:workloads} shows how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
 
 
 
@@ -105,23 +85,23 @@ Let us first provide the necessary preliminaries on the hardware and software co
 \subsection{Hardware platform}
 \label{sec:hw_components}
 
-The central component of our hardware platform is the STM32F767 microcontroller, shown in Fig.~\ref{fig:stm32_hw}. It has the following characteristics:
+The central component of our hardware platform is the STM32F767 microcontroller, shown in Fig.~\ref{fig:stm32_hw}. Its CPU has the following characteristics:
 %
 \begin{itemize}
-	\item It is a single-core microcontroller.
-	\item It uses an ARM Cortex-M7 processor core.
-	\item Its clock frequency is 96 MHz.
+	\item Number of cores: one.
+	\item Processor core architecture: ARM Cortex-M7.
+	\item Operating frequency: 96 MHz.
 \end{itemize}
 
 To generate workloads for the STM32 microcontroller, we use several sensors, summarized in Table~\ref{tab:sensor_interfaces}. Each sensor has the following properties:
 %
 \begin{itemize}
-	\item It is connected to the STM32 through one of the hardware interfaces listed in Table~\ref{tab:sensor_interfaces}.
-	\item It is associated with a periodic task that generates a sequence of jobs, as formally described in Section~\ref{sec:system_model}.
-	\item Its task shares the same processor with other sensor tasks, requiring a scheduler to manage their execution.
+	\item Connected to the STM32 through one of the hardware interfaces listed in Table~\ref{tab:sensor_interfaces}.
+	\item Associated with a periodic task that generates a sequence of jobs, as formally described in Section~\ref{sec:system_model}.
+	\item Task shares the same processor with other sensor tasks, requiring a scheduler to manage their execution.
 \end{itemize}
 
-The code responsible for reading and processing sensor data forms the sensor-based workload used in our scheduling experiments.
+The code responsible for reading and processing sensor data produces the workload used in our scheduling experiments.
 
 
 \begin{table}[H]
@@ -163,63 +143,46 @@ The code responsible for reading and processing sensor data forms the sensor-bas
 
 
 
-
-\subsection{STM32 Software}
+\todo{Rewrite Soft and default model sections with only 1 sensor description}
+\subsection{STM32 software}
 \label{sec:stm32_software}
+To program our hardware, we use CubeIDE and CubeMX - specialized software environments for STM32 devices.
 
-%We develop the so STM32F767 application using two tools provided by STMicroelectronics: STM32CubeMX and STM32CubeIDE. First, we use STM32CubeMX to:
-We develop software for the STM32F767 microcontroller using two tools provided by STMicroelectronics: STM32CubeMX and STM32CubeIDE. First, we use STM32CubeMX to:
+CubeMX is used for:
 \begin{itemize}
-	\item Configure the microcontroller clock.
-	\item Initialize peripherals and pins.
-	\item Generate a C project.
-\end{itemize}
-%We use STM32CubeIDE to implement, build and debug our project.
-Then, we use STM32CubeIDE to:
-\begin{itemize}
-	\item Write application code.
-	\item Build the project.
-	\item Debug the program.
+	\item \textbf{Pin configuration:} assigning pins as inputs, outputs or connections to peripheral interfaces.
+	\item \textbf{Clock configuration:} setting the operating frequencies of the processor and peripherals.
+	\item \textbf{Peripheral configuration:} setting up timers and communication interfaces.
+	\item \textbf{Project generation:} creating a project with initialization code for the selected settings.
 \end{itemize}
 
-%Fig.~\ref{fig:stm32_project_structure} shows the main components of our project. The file \texttt{main.c} contains initialization code and the main execution logic. It also contains sections marked as \texttt{USER CODE}. We place our application code in these sections to preserve it when the project is regenerated.
+Note that CubeMX always generates project code in C programming language.
 
-\todo{Expand the description?}
-
-Fig.~\ref{fig:stm32_project_structure} shows the main files and directories of our STM32F767 project. The \texttt{Core} directory contains header and source files organized into \texttt{Inc} and \texttt{Src}, respectively. The \texttt{Startup} directory contains the code required to start the microcontroller, while \texttt{Drivers} provides hardware support.
-
-Among the source files, \texttt{main.c} is the central file for our work. It has the following responsibilities:
-%
+CubeIDE instead we use for:
 \begin{itemize}
-	\item It contains the \texttt{main()} function, where program execution begins after startup.
-	\item It calls the functions that initialize the microcontroller clock and peripherals.
-	\item It contains the main execution loop, which organizes the execution of tasks.
+	\item \textbf{Code implementation:} writing the schedulers and sensor logic.
+	\item \textbf{Compilation and debugging:} building the program and checking its execution.
+	\item \textbf{Programming the microcontroller:} uploading the compiled program to the board.
 \end{itemize}
 
-\begin{figure}[H]
+\subsection{Structure of project file system}
+\begin{figure}[t]
 	\centering
-	\begin{minipage}{\columnwidth}
-		\footnotesize
-		\renewcommand*\DTstyle{\ttfamily}
-		\renewcommand*\DTstylecomment{\rmfamily\itshape}
-		\DTsetlength{0.2em}{0.8em}{0.2em}{0.35pt}{1.2pt}
-		
-		\dirtree{%
-			.1 Schedulers\_Performance\_Evaluation/.
-			.2 Core/\DTcomment{Application code}.
-			.3 Inc/\DTcomment{Header files}.
-			.3 Src/\DTcomment{Source files}.
-			.4 main.c\DTcomment{Init. and main loop}.
-			.4 stm32f7xx\_it.c\DTcomment{Interrupt handlers}.
-			.4 stm32f7xx\_hal\_msp.c\DTcomment{Low-level peripheral setup}.
-			.4 system\_stm32f7xx.c\DTcomment{Core init. and clock state}.
-			.3 Startup/\DTcomment{Startup code and interrupt vectors}.
-			.2 Drivers/\DTcomment{Hardware support}.
-		}
-	\end{minipage}
-	\caption{Main files and directories of our STM32F767 project.}
+	\includegraphics[width=1\columnwidth]{tree_hc-sr04.png}
+	\caption{Our project structure.}
 	\label{fig:stm32_project_structure}
 \end{figure}
+
+Fig.~\ref{fig:stm32_project_structure} shows our project structure. We identify three main directories:
+%
+\begin{itemize}
+	\item \texttt{Core}: contains two main subdirectories, \texttt{Inc} for header files and \texttt{Src} for C source files.
+	\item \texttt{Startup}: contains the code required to start the microcontroller.
+	\item \texttt{Drivers}: contains the code used to access hardware peripherals.
+\end{itemize}
+
+The central file for our work is \texttt{main.c}. It contains the main execution loop, which we use to implement our schedulers. The functions responsible for sensor operations are implemented in separate source files. For example, \texttt{hcsr04.c} contains the implementation of the distance measurement task. The corresponding header file, \texttt{hcsr04.h}, declares the functions used in \texttt{main.c}. This separation allows us to organize the program into individual functions. We next examine how these functions are executed within the main loop.
+
 
 
 
@@ -228,33 +191,41 @@ Among the source files, \texttt{main.c} is the central file for our work. It has
 
 \subsection{Default execution model}
 \label{sec:default_execution_model}
-\todo{To expand first paragraph?}
 
-Initially, STM32CubeMX generates an infinite \texttt{while(1)} loop in \texttt{main.c}. This loop has the following properties:
+By default, STM32CubeMX generates an infinite \texttt{while(1)} loop in \texttt{main.c}. To illustrate how this loop works, we consider a simple program that measures the distance to an object and prints the result. The program is shown in Fig.~\ref{fig:main_example}.
 
-\todo{functions or tasks?}
-%
-\begin{itemize}
-	\item Fixed execution order: tasks are called sequentially in a predefined order.
-	\item Non-preemptive execution: each tasks runs to completion before the next one starts.
-	\item Repeated execution: once all tasks have finished, the loop starts a new iteration.
-\end{itemize}
+\begin{figure}[!t]
+	\centering
+	
+	\includegraphics[width=\columnwidth]{hcsr04_include.png}
+	
+	\par\vspace{-4pt}
+	
+	\subfloat[Program with distance measurement.
+	\label{fig:main_hcsr04}]{%
+		\includegraphics[width=\columnwidth]{hcsr04_main.png}}
+	
+	\caption{The example of main() with 2 tasks: distance measurement by an ultrasonic sensor and printing the result}
+	\label{fig:main_example}
+\end{figure}
 
-Fig.~\ref{fig:while_loop_execution} illustrates the execution of such a loop with two functions: \texttt{run\_taskA()} and \texttt{run\_taskB()}. Both functions generate CPU load, with execution times of 6 ms and 4 ms, respectively. Since \texttt{run\_taskA()} executes first, \texttt{run\_taskB()} must wait until it finishes. Each loop iteration takes 10 ms, after which the sequence repeats.
+After initializing the microcontroller and the HC-SR04 sensor, the program enters the \texttt{while(1)} loop. Each iteration executes two functions in a fixed order. First, \texttt{HCSR04\_Read\_cm\_Blocking()} measures the distance to an object. Then, \texttt{printDistance()} sends the measured value to the serial terminal. The second function can start only after the first one finishes. Once both functions have completed, the next iteration begins.
 
-\todo{So-so figure? To think about aesthetics}
-\begin{figure}[H]
+Fig.~\ref{fig:while_loop_execution} illustrates this sequence. In this example, we assume that distance measurement takes 6 ms and printing the result takes 4 ms. The first function executes from 0 to 6 ms, followed by the second function from 6 to 10 ms. The next iteration starts at 10 ms and repeats the same sequence. Thus, each iteration takes 10 ms. \todo{Remove while loop figure?}
+
+\begin{figure}[!b]
 	\centering
 	\includegraphics[width=\columnwidth]{while_loop_example.png}
-	\caption{Example of while loop execution with two sequential functions. Shaded intervals indicate function execution. Each loop iteration consists of \texttt{run\_taskA()} executing for 6 ms, followed by \texttt{run\_taskB()} for 4 ms, resulting in a total duration of 10 ms.}
+	\caption{The illustration of while-loop execution with 2 tasks: distance measurement by an ultrasonic sensor and printing the result.}
 	\label{fig:while_loop_execution}
 \end{figure}
 
-In our project, we use the \texttt{while(1)} loop as the basis for implementing the schedulers, which are described in Section~\ref{sec:schedulers}. Unlike the simple example in Fig.~\ref{fig:while_loop_execution}, the sensor-based tasks in our system must satisfy the timing requirements of the sensors listed in Table~\ref{tab:sensor_interfaces}. We describe these tasks and their timing requirements in Section~\ref{sec:workloads}.
 
 
+In our system, the sensors listed in Table~\ref{tab:sensor_interfaces} have different timing requirements. Therefore, the corresponding functions need to be executed at specified time intervals. In the default execution model, all functions are called in every iteration of the \texttt{while(1)} loop without taking these requirements into account.
 
 
+To support periodic task execution, we implement two schedulers within this loop. We describe this schedulers in Section~\ref{sec:schedulers}.
 
 
 
@@ -264,6 +235,7 @@ In our project, we use the \texttt{while(1)} loop as the basis for implementing 
 
 \section{Experimental System for Schedulers Evaluation}
 \label{sec:workloads}
+
 
 Our experimental system consists of four tasks executed on the STM32F767 microcontroller:
 
@@ -278,8 +250,6 @@ Our experimental system consists of four tasks executed on the STM32F767 microco
 Now we describe each sensor in more details.
 
 \subsection{Task 1: distance measurement by an ultrasonic sensor}
-\todo{Is it a guide? Is here a tautology?}
-%Distance measurement is a frequently occurring task in robotic systems. By using an ultrasonic sensor, the central microcontroller periodically computes the distance to obstacles by relying on ECHO signals measured by this sensor. Despite this task to be simple, it allows us to illustrate the entire processing sequence between sensor and microcontroller.
 
 Distance measurement is a common task in robotic systems. To perform this task, we use the HC-SR04 ultrasonic sensor connected to the STM32F767 microcontroller. The measurement process relies on two signals: TRIG and ECHO. First, the microcontroller sends a TRIG signal to activate the sensor. The sensor then emits an ultrasonic pulse and waits for its reflection from the object. Next, the sensor generates an ECHO signal. Finally, the microcontroller measures the duration of this signal and uses it to calculate the distance to the object. 
 
@@ -300,20 +270,44 @@ The overview of hardware components for such a task is depicted in Fig.~\ref{fig
 \end{figure}
 
 
+The software implementation of the distance measurement task is shown in Fig.~\ref{fig:hcsr04_measurement_code}. The function \texttt{HCSR04\_Read\_cm\_Blocking()} first generates a TRIG pulse. It keeps the TRIG pin high for 10 microseconds, the minimum duration required to start a measurement~\cite{HCSR04Datasheet}, before setting it low again. 
 
+The function then waits for ECHO to become high and records the microcontroller's cycle counter. This counter increases by one on each processor clock cycle. When ECHO becomes low again, the function reads the counter a second time. During both waiting stages, the processor repeatedly checks the ECHO pin. The difference between the two counter readings gives the number of clock cycles during which ECHO remained high. Using the processor frequency, the function converts this count into a duration in microseconds. Finally, the duration is converted into distance in centimeters.
 
-
-\subsection{Task 2: Temperature and humidity measurement by a DHT11 sensor}
-Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. Fig.~\ref{fig:dht11_hw} shows the sensor's main components and its connection to the microcontroller.
-
-To obtain the measurements, the STM32F767 sends a start signal over the DATA connection to the internal 8-bit microcontroller of the DHT11. This internal microcontroller uses the two sensing elements to measure temperature and humidity. It sends a start signal to the two sensing elements. It then reads their signals and converts them into temperature and humidity values. Finally, it sends the results back to the STM32F767 as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. The STM32F767 reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
 
 \begin{figure}[H]
 	\centering
-	\includegraphics[width=0.65\columnwidth]{dht11_hw.png}
-	\caption{Functional diagram of the DHT11 sensor and its connection to the STM32F767 microcontroller.}
-	\label{fig:dht11_hw}
+	\begin{minipage}{\columnwidth}
+		\raggedright
+		\includegraphics[width=0.437\linewidth]{includes_and_defines_hcsr04.png}
+		
+		\par\vspace{6pt}
+		
+		\includegraphics[width=\linewidth]{hcsr04_distance_measure.png}
+	\end{minipage}
+	
+	\caption{Implementation of HC-SR04 distance measurement task.}
+	\label{fig:hcsr04_measurement_code}
 \end{figure}
+
+The code shown in Fig.~\ref{fig:hcsr04_measurement_code} provides a basic example of distance measurement using the HC-SR04 sensor. Later, in Section~\ref{sec:task_implementation}, we describe how this code is adapted for the schedulers described in Section~\ref{sec:schedulers}.
+
+
+
+
+
+
+%\subsection{Task 2: Temperature and humidity measurement by a DHT11 sensor}
+%Temperature and humidity measurement is another common task in robotic systems. To perform this task, we use the DHT11 sensor connected to the STM32F767 microcontroller. Fig.~\ref{fig:dht11_hw} shows the sensor's main components and its connection to the microcontroller.
+%
+%To obtain the measurements, the STM32F767 sends a start signal over the DATA connection to the internal 8-bit microcontroller of the DHT11. This internal microcontroller uses the two sensing elements to measure temperature and humidity. It sends a start signal to the two sensing elements. It then reads their signals and converts them into temperature and humidity values. Finally, it sends the results back to the STM32F767 as a series of 40 pulses. Each pulse carries one bit. A short pulse means 0, and a longer one means 1. The STM32F767 reads these bits and groups them into five bytes. The first four bytes contain the temperature and humidity values, while the fifth byte is used to verify the received data.
+%
+%\begin{figure}[H]
+%	\centering
+%	\includegraphics[width=0.65\columnwidth]{dht11_hw.png}
+%	\caption{Functional diagram of the DHT11 sensor and its connection to the STM32F767 microcontroller.}
+%	\label{fig:dht11_hw}
+%\end{figure}
 
 
 
@@ -557,6 +551,9 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 \end{figure*}
 
 \clearpage
+
+\section{Task Implementation}
+\label{sec:task_implementation}
 
 \section{Performance evaluation}
 \label{sec:performance_evaluation}
