@@ -70,7 +70,7 @@ First, we compare Superloop and chunked EDF for periodic tasks with implicit dea
 
 \subsection{Paper organization}
 
-Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and the project structure in Section~\ref{sec:stm32_software}. Sections~\ref{sec:default_execution_model} and~\ref{sec:workloads} shows how application functions execute and explain the differences between synthetic and sensor workloads. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
+Initially, in Section~\ref{sec:STM32_background}, we provide the necessary background on STM32. We describe the hardware platform in Section~\ref{sec:hw_components} and STM32 software in Section~\ref{sec:stm32_software}. Sections~\ref{sec:stm32_project_structure} and~\ref{sec:default_execution_model} describe our project structure and the default execution model, respectively. Then, in Section~\ref{sec:workloads}, we describe the sensors in our experimental system and explain how the STM32 uses each sensor to perform its corresponding task. Next, in Section~\ref{sec:system_model} we formalize the periodic task model used in our experiments. Finally, in Section~\ref{sec:schedulers}, we describe Superloop, fully preemptive EDF, and chunked EDF and illustrate their schedules for the same task set.
 
 
 
@@ -144,8 +144,6 @@ The code responsible for reading and processing sensor data produces the workloa
 
 
 
-
-\todo{Rewrite Soft and default model sections with only 1 sensor description}
 \subsection{STM32 software}
 \label{sec:stm32_software}
 To program our hardware, we use CubeIDE and CubeMX - specialized software environments for STM32 devices.
@@ -168,6 +166,7 @@ CubeIDE instead we use for:
 \end{itemize}
 
 \subsection{Structure of project file system}
+\label{sec:stm32_project_structure}
 \begin{figure}[t]
 	\centering
 	\includegraphics[width=1\columnwidth]{tree_hc-sr04.png}
