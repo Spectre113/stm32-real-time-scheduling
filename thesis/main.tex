@@ -198,24 +198,17 @@ By default, STM32CubeMX generates an infinite \texttt{while(1)} loop in \texttt{
 
 \begin{figure}[!t]
 	\centering
-	
-	\includegraphics[width=\columnwidth]{hcsr04_include.png}
-	
-	\par\vspace{-4pt}
-	
-	\subfloat[Program with distance measurement.
-	\label{fig:main_hcsr04}]{%
-		\includegraphics[width=\columnwidth]{hcsr04_main.png}}
-	
+	\includegraphics[width=\columnwidth]{hcsr04_main.png}
 	\caption{The example of main() with 2 tasks: distance measurement by an ultrasonic sensor and printing the result}
 	\label{fig:main_example}
 \end{figure}
+
 
 After initializing the microcontroller and the HC-SR04 sensor, the program enters the \texttt{while(1)} loop. Each iteration executes two functions in a fixed order. First, \texttt{HCSR04\_Read\_cm\_Blocking()} measures the distance to an object. Then, \texttt{printDistance()} sends the measured value to the serial terminal. The second function can start only after the first one finishes. Once both functions have completed, the next iteration begins.
 
 Fig.~\ref{fig:while_loop_execution} illustrates this sequence. In this example, we assume that distance measurement takes 6 ms and printing the result takes 4 ms. The first function executes from 0 to 6 ms, followed by the second function from 6 to 10 ms. The next iteration starts at 10 ms and repeats the same sequence. Thus, each iteration takes 10 ms. \todo{Remove while loop figure?}
 
-\begin{figure}[!b]
+\begin{figure}[!t]
 	\centering
 	\includegraphics[width=\columnwidth]{while_loop_example.png}
 	\caption{The illustration of while-loop execution with 2 tasks: distance measurement by an ultrasonic sensor and printing the result.}
@@ -264,33 +257,23 @@ The overview of hardware components for such a task is depicted in Fig.~\ref{fig
 	\item The two wires used to transmit the TRIG and ECHO signals between the microcontroller and the sensor.
 \end{itemize}
 
-\begin{figure}[H]
+\begin{figure}[!t]
 	\centering
 	\includegraphics[width=\columnwidth]{hc-sr04_hw.png}
 	\caption{Distance measurement with the HC-SR04 ultrasonic sensor.}
 	\label{fig:hc-sr04_hw}
 \end{figure}
 
+\begin{figure}[!b]
+	\includegraphics[width=\linewidth]{hcsr04_distance_measure.png}
+	\caption{Implementation of HC-SR04 distance measurement task.}
+	\label{fig:hcsr04_measurement_code}
+\end{figure}
 
 The software implementation of the distance measurement task is shown in Fig.~\ref{fig:hcsr04_measurement_code}. The function \texttt{HCSR04\_Read\_cm\_Blocking()} first generates a TRIG pulse. It keeps the TRIG pin high for 10 microseconds, the minimum duration required to start a measurement~\cite{HCSR04Datasheet}, before setting it low again. 
 
 The function then waits for ECHO to become high and records the microcontroller's cycle counter. This counter increases by one on each processor clock cycle. When ECHO becomes low again, the function reads the counter a second time. During both waiting stages, the processor repeatedly checks the ECHO pin. The difference between the two counter readings gives the number of clock cycles during which ECHO remained high. Using the processor frequency, the function converts this count into a duration in microseconds. Finally, the duration is converted into distance in centimeters.
 
-
-\begin{figure}[H]
-	\centering
-	\begin{minipage}{\columnwidth}
-		\raggedright
-		\includegraphics[width=0.437\linewidth]{includes_and_defines_hcsr04.png}
-		
-		\par\vspace{6pt}
-		
-		\includegraphics[width=\linewidth]{hcsr04_distance_measure.png}
-	\end{minipage}
-	
-	\caption{Implementation of HC-SR04 distance measurement task.}
-	\label{fig:hcsr04_measurement_code}
-\end{figure}
 
 The code shown in Fig.~\ref{fig:hcsr04_measurement_code} provides a basic example of distance measurement using the HC-SR04 sensor. Later, in Section~\ref{sec:task_implementation}, we describe how this code is adapted for the schedulers described in Section~\ref{sec:schedulers}.
 
@@ -334,7 +317,7 @@ Let $J_{i,j}$ denote the $j$-th job of $\tau_i$, released at $r_{i,j}$. Consecut
 \end{equation}
 Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed, its finish time is denoted by $f_{i,j}$.
 
-\begin{table}[H]
+\begin{table}[!b]
 	\centering
 	\caption{System model notation.}
 	\label{tab:system_model}
@@ -374,7 +357,7 @@ Each job $J_{i,j}$ has an absolute deadline $d_{i,j}=r_{i,j}+D_i$. If completed,
 
 
 
-\section{Superloop and EDF Schedulers}
+\section{Superloop, EDF and Chunked EDF Schedulers}
 \label{sec:schedulers}
 
 We next describe the Superloop and chunked EDF schedulers used in our experiments. Fully preemptive EDF serves as a reference for comparison.
@@ -395,7 +378,7 @@ At the start of each loop iteration, the scheduler checks all tasks using the sa
 Similar approaches to periodic task scheduling in a main loop are described by Koopman~\cite{Koopman2015MultiRate} and Jones~\cite{Jones2024RTOSPart1}. Algorithm~\ref{alg:superloop} shows this process.
 
 %
-\begin{algorithm}[H]
+\begin{algorithm}[!b]
 	\caption{Superloop Scheduler}
 	\label{alg:superloop}
 	\begin{algorithmic}[1]
@@ -466,7 +449,7 @@ Algorithm~\ref{alg:chunked_edf} shows this process. The Boolean flag $a_i$ indic
 For an active job, $d_i=r_i+D_i$, where $r_i$ is its saved release time. Otherwise, $d_i=t_i^{\mathsf{next}}+D_i$.
 
 %
-\begin{algorithm}[H]
+\begin{algorithm}[!t]
 	\caption{Chunked EDF Scheduler}
 	\label{alg:chunked_edf}
 	\begin{algorithmic}[1]
@@ -534,15 +517,15 @@ Fig.~\ref{fig:scheduler_schedules}\subref{fig:chunked_edf} shows the same task s
 		
 		\subfloat[Superloop: missed deadline and skipped job release.
 		\label{fig:superloop_schedule}]{%
-			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{superloop_execution_schedule.png}}\par
+			\includegraphics[width=\linewidth]{superloop_execution_schedule.png}}\par
 		
 		\subfloat[Preemptive EDF: immediate preemption by a newly released job with an earlier deadline.
 		\label{fig:edf_schedule}]{%
-			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{edf_execution_schedule.png}}\par
+			\includegraphics[width=\linewidth]{edf_execution_schedule.png}}\par
 		
 		\subfloat[Chunked EDF: delayed preemption until the current chunk completes.
 		\label{fig:chunked_edf}]{%
-			\includegraphics[width=\linewidth,trim=3bp 17bp 13bp 9bp,clip]{chunked_edf_execution_schedule.png}}\par
+			\includegraphics[width=\linewidth]{chunked_edf_execution_schedule.png}}\par
 		
 		\smallskip
 		\includegraphics[width=\linewidth]{scheduler_legend.png}
